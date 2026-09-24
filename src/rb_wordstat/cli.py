@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+import sys
 from importlib import resources
 
 import typer
@@ -93,7 +95,15 @@ def main_options(
     output.help_if_no_command(ctx)
 
 
+def use_utf8_stdio() -> None:
+    """Вывод всегда в UTF-8: в pipe Windows по умолчанию пишет в cp1252 и падает на кириллице."""
+    for stream in (sys.stdout, sys.stderr):
+        if isinstance(stream, io.TextIOWrapper) and stream.encoding.lower().replace("-", "") != "utf8":
+            stream.reconfigure(encoding="utf-8")
+
+
 def main() -> None:
+    use_utf8_stdio()
     app()
 
 

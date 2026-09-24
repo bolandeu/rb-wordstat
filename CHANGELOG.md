@@ -46,5 +46,7 @@ write them at release time.
 - Windows: `skill install` и `--ai` читают и пишут SKILL.md в UTF-8
   (кириллица падала в кодировке по умолчанию cp1252); `.wordstat/config.toml`
   тоже всегда в UTF-8.
+- Windows: вывод в pipe (агенты, CI, `> файл`) падал с `UnicodeEncodeError`
+  на кириллице — stdout/stderr теперь всегда в UTF-8.
 - Зависимости в `uv.lock` обновлены до версий без известных уязвимостей
   (anyio, cryptography, idna, pygments, pytest) — аудит OSV-Scanner в CI.

@@ -259,3 +259,17 @@ def test_skill_install_writes_to_project_dir(tmp_path: Path, monkeypatch: pytest
     assert installed.is_file()
     assert "wordstat" in installed.read_text(encoding="utf-8")
     assert payload["path"] == str(installed)
+
+
+def test_stdio_switched_to_utf8(monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+    import sys
+
+    from rb_wordstat.cli import use_utf8_stdio
+
+    out = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", out)
+    monkeypatch.setattr(sys, "stderr", io.StringIO())  # не TextIOWrapper — не трогаем
+    use_utf8_stdio()
+    assert out.encoding == "utf-8"
+    print("кириллица", file=out)
