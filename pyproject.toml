@@ -1,6 +1,6 @@
 [project]
 name = "rb-wordstat"
-version = "0.1.0"
+version = "0.2.0"
 description = "Частоты Яндекс.Wordstat через провайдеров (XML River, XMLStock) с фолбэком: CLI wordstat и библиотека rb_wordstat"
 readme = "README.md"
 authors = [{ name = "bolandeu" }]

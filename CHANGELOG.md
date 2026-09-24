@@ -8,6 +8,8 @@ write them at release time.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-24
+
 ### Changed
 
 - CLI переведён на архитектуру cli-generator (Typer), как у serp: одна
