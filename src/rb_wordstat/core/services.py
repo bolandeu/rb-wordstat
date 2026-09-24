@@ -4,6 +4,7 @@ import csv
 import json
 import logging
 import tomllib
+from datetime import timedelta
 from pathlib import Path
 
 import tomli_w
@@ -110,13 +111,32 @@ def resolve_freq(values: list[str]) -> list[FreqType]:
     return seen or [FreqType.broad]
 
 
-def search(queries: list[str], *, freq: list[FreqType], lr: int, providers: list[str]) -> list[WordstatResult]:
-    """Частоты по всем запросам × типам частоты через очередь провайдеров."""
+_AGE_UNITS = {"m": "minutes", "h": "hours", "d": "days", "w": "weeks"}
+
+
+def parse_age(value: str) -> timedelta:
+    """'30m', '12h', '7d', '2w' → timedelta."""
+    number, unit = value[:-1], value[-1:].lower()
+    if not number.isdigit() or unit not in _AGE_UNITS:
+        raise InvalidArguments(f"Не понимаю срок '{value}': нужно число и m/h/d/w, например 30m, 12h, 7d, 2w.")
+    return timedelta(**{_AGE_UNITS[unit]: int(number)})
+
+
+def search(
+    queries: list[str],
+    *,
+    freq: list[FreqType],
+    lr: int,
+    providers: list[str],
+    use_cache: bool = False,
+    max_age: timedelta | None = None,
+) -> list[WordstatResult]:
+    """Частоты по всем запросам × типам частоты через очередь провайдеров; ответы пишутся в журнал."""
     try:
         params = WordstatParams(query=queries, lr=lr, freq=freq)
     except ValidationError as exc:
         raise InvalidArguments("; ".join(err["msg"] for err in exc.errors())) from exc
-    return WordstatClient(providers=providers).search_sync(params)
+    return WordstatClient(providers=providers).search_sync(params, use_cache=use_cache, max_age=max_age)
 
 
 def csv_mode_for(mode: str, freq: list[FreqType]) -> str:

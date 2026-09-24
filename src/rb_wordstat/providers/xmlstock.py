@@ -29,7 +29,8 @@ class XmlStockProvider(WordstatProvider):
             "groupby": _GROUPBY,
         }
 
-    def _api_error(self, data: dict) -> ApiError | None:
+    @classmethod
+    def _api_error(cls, data: dict) -> ApiError | None:
         error = data.get("error")
         if not error:
             return None
@@ -38,7 +39,8 @@ class XmlStockProvider(WordstatProvider):
         message = f"ошибка {error.get('code')}: {error.get('message')}"
         return ApiError("auth" if error.get("code") in _AUTH_ERRORS else "retry", message)
 
-    def _parse(self, data: dict) -> tuple[int, list[dict], list[dict]]:
+    @classmethod
+    def _parse(cls, data: dict) -> tuple[int, list[dict], list[dict]]:
         def rows(items: list[dict]) -> list[dict]:
             return [{"text": item.get("phrase"), "value": item.get("count")} for item in items]
 

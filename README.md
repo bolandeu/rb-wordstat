@@ -60,6 +60,9 @@ wordstat --ai                 # памятка для AI-агентов
 | `--output` | `-o` | | дополнительно сохранить: `.csv` → CSV (см. `--csv-mode`), иначе JSON |
 | `--csv-mode` | | `auto` | `freq` / `keywords` / `auto` (freq при нескольких типах, иначе keywords) |
 | `--no-keywords` | | | в консоли только частоты |
+| `--cache` | | | взять ответ из журнала, если есть (бесплатно), см. ниже |
+| `--max-age` | | | с `--cache`: только записи не старше `30m` / `12h` / `7d` / `2w` |
+| `--force` | | | всегда живой запрос, даже с `--cache` |
 
 | Тип | Оператор | Пример |
 | --- | --- | --- |
@@ -92,6 +95,40 @@ CSV `freq`: `query,freq_type,freq_label,operator,total_value`. CSV `keywords`:
 
 Частота 0 — это «запрос не ищут», а не сбой: сбой всегда даёт код 3 или 5.
 
+### Журнал ответов и кэш
+
+Каждый ответ провайдера **всегда** сохраняется целиком (сжатый JSON, вся история) в
+SQLite-базу `wordstat.db` в папке данных приложения — рядом с журналом serp: на macOS
+`~/Library/Application Support/wordstat/`, на Linux `~/.local/share/wordstat/`, на Windows
+`%LOCALAPPDATA%\wordstat\`. Другой путь — переменная `WORDSTAT_DB_PATH`. Логин и ключ
+провайдера туда не попадают.
+
+Отдать из журнала вместо платного запроса — только по флагу:
+
+```bash
+wordstat search "диван" --cache              # есть в журнале → бесплатно, нет → живой запрос
+wordstat search "диван" --cache --max-age 7d # только если ответ не старше недели
+wordstat search "диван" --cache --force      # всё равно живой запрос, он станет актуальным
+```
+
+Ключ записи — провайдер, тип частоты, регион и текст запроса (без учёта регистра и лишних
+пробелов). `--cache` берёт ответ только провайдеров из очереди `--provider`, в её порядке:
+`-p xmlstock,xmlriver --cache` — сначала запись XMLStock, нет её — запись XML River, нет и
+её — живой запрос. В `--json` у результата видно `from_cache` и `fetched_at`.
+
+```bash
+wordstat cache info                               # где файл, размер, число записей, даты
+wordstat cache list -q диван                      # последние записи (без самих ответов)
+wordstat cache clear --older-than 30d --dry-run   # сколько удалится
+wordstat cache clear --older-than 30d --confirm   # удалить старше 30 дней
+wordstat cache clear --all --confirm              # очистить всё
+```
+
+Почему `sqlite3` из стандартной библиотеки, а не готовый кэш (как в serp): `hishel`
+(HTTP-кэш для httpx) ключует по URL — а в нём логин и ключ провайдера, и не хранит
+историю; `diskcache` — это «ключ → значение» без истории и выборки по дате. История,
+выборка по дате и размер — это обычная SQL-таблица.
+
 ### Провайдеры и фолбэк
 
 `--provider a,b` — очередь: для каждой пары (запрос, тип частоты) первый провайдер
@@ -123,6 +160,7 @@ client = WordstatClient()  # очередь по умолчанию: ["xmlriver"
 params = WordstatParams(query=["купить диван", "кресло"], lr=213, freq=[FreqType.broad, FreqType.exact])
 results = client.search_sync(params)
 # async: results = await client.search(params)
+# из журнала: client.search_sync(params, use_cache=True, max_age=timedelta(days=7))
 
 for r in results:
     print(r.query, r.freq_type.label, r.total_value, r.provider)
@@ -131,7 +169,8 @@ for r in results:
 ```
 
 `WordstatResult`: `query`, `freq_type`, `total_value`, `popular` и `associations`
-(списки `WordstatEntry(text, value)`), `provider`.
+(списки `WordstatEntry(text, value)`), `provider`, `fetched_at`, `from_cache`. Клиент
+пишет каждый ответ в журнал (см. выше); `WordstatClient(cache=False)` — не писать.
 
 Ошибки — исключения `rb_wordstat.AuthRequired` и `rb_wordstat.ProviderError` (у обоих
 `.message` и `.action`). Логи — стандартный `logging`, логгер `rb_wordstat`:
@@ -142,8 +181,9 @@ for r in results:
 1. `src/rb_wordstat/providers/<name>.py` — подкласс `WordstatProvider` с `name`,
    `summary`, `url` и тремя методами: `_params` (GET-параметры), `_api_error` (ошибка в
    теле → `ApiError` с видом `auth` / `retry` / `fatal` / `empty`) и `_parse` (частота,
-   похожие, ассоциации как `{"text", "value"}`). HTTP, повторы и перевод ошибок в
-   `AuthRequired` / `ProviderError` — в базовом классе.
+   похожие, ассоциации как `{"text", "value"}`). `_api_error` и `_parse` — classmethod:
+   ими же разбираются ответы из журнала. HTTP, повторы и перевод ошибок в
+   `AuthRequired` / `ProviderError` — в базовом классе, журнал и фолбэк — в `WordstatClient`.
 2. Добавить класс в `PROVIDERS` в `src/rb_wordstat/providers/__init__.py`.
 
 После этого он доступен в `--provider`, `wordstat auth login --provider <name>` и `doctor`.

@@ -88,6 +88,19 @@ def search(
         "типах частоты, иначе keywords.",
     ),
     no_keywords: bool = typer.Option(False, "--no-keywords", help="В консоли только частоты, без похожих запросов."),
+    cache: bool = typer.Option(
+        False,
+        "--cache",
+        help="Взять ответ из журнала, если такой запрос (провайдер, тип частоты, регион, текст) уже был — "
+        "бесплатно. Только ответы провайдеров из --provider, в порядке очереди. Без флага — всегда живой "
+        "запрос. Ответы пишутся в журнал всегда.",
+    ),
+    max_age: str | None = typer.Option(
+        None, "--max-age", help="С --cache: брать из журнала, только если запись не старше срока: 30m, 12h, 7d, 2w."
+    ),
+    force: bool = typer.Option(
+        False, "--force", help="Всегда живой запрос, даже с --cache; новый ответ станет актуальным."
+    ),
     json_output: bool = output.JsonOption,
     quiet: bool = output.QuietOption,
     verbose: bool = output.VerboseOption,
@@ -100,9 +113,12 @@ def search(
     только «запрос не ищут», не сбой. Похожие запросы и ассоциации приходят с
     типом broad.
 
+    Каждый ответ провайдера пишется в журнал (`wordstat cache`); с --cache
+    повторный запрос берётся оттуда бесплатно.
+
     --json: {"ok": true, "count": N, "results": [{query, freq_type,
-    total_value, popular: [{text, value}], associations: [...], provider},
-    ...]} (+ "saved_to" при --output).
+    total_value, popular: [{text, value}], associations: [...], provider,
+    fetched_at, from_cache}, ...]} (+ "saved_to" при --output).
 
     \b
     Примеры:
@@ -112,12 +128,20 @@ def search(
       wordstat search "купить диван" -p xmlstock,xmlriver   # xmlriver — фолбэк
       wordstat search "купить диван" --freq all --output freq.csv
       wordstat search "купить диван" --output keywords.csv --csv-mode keywords
+      wordstat search "купить диван" --cache --max-age 7d   # из журнала, если свежее недели
       wordstat search "купить диван" --json
     """
     freq_types = services.resolve_freq(freq)
     providers = services.resolve_providers(provider, Path(ctx.obj.get("project") or Path.cwd()))
     output.vecho(ctx, f"Провайдеры: {', '.join(providers)}")
-    results = services.search(queries, freq=freq_types, lr=lr, providers=providers)
+    results = services.search(
+        queries,
+        freq=freq_types,
+        lr=lr,
+        providers=providers,
+        use_cache=cache and not force,
+        max_age=services.parse_age(max_age) if max_age else None,
+    )
 
     payload: dict = {"count": len(results), "results": [r.model_dump(mode="json") for r in results]}
     if output_path is not None:

@@ -6,6 +6,7 @@ import typer
 
 from .. import output
 from ..core import services
+from ..core.cache import ResponseCache
 from ..core.errors import CliTooOld, InvalidArguments
 from ..core.models import DEFAULT_PROVIDERS, ProjectConfig
 from ..core.version import CLI_NAME, DEV_VERSION, installed_version
@@ -45,7 +46,7 @@ def doctor(
     quiet: bool = output.QuietOption,
     verbose: bool = output.VerboseOption,
 ) -> None:
-    """Диагностика: версия, проект, настройки, связка ключей, доступы провайдеров.
+    """Диагностика: версия, проект, настройки, журнал, связка ключей, доступы провайдеров.
 
     Всегда завершается с кодом 0 — результат это сам отчёт; `healthy`
     говорит, прошли ли все проверки.
@@ -72,6 +73,12 @@ def doctor(
             checks.append({"name": "cli_compat", "ok": True, "detail": f"project requires >= {config.cli.min_version}"})
         except CliTooOld as exc:
             checks.append({"name": "cli_compat", "ok": False, "detail": exc.message})
+
+    try:
+        stats = ResponseCache().stats()
+        checks.append({"name": "cache", "ok": True, "detail": f"{stats.path} ({stats.entries} записей)"})
+    except Exception as exc:
+        checks.append({"name": "cache", "ok": False, "detail": f"журнал недоступен: {exc}"})
 
     checks.extend(_auth_checks(config.providers if config else DEFAULT_PROVIDERS))
 

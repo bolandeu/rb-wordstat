@@ -38,7 +38,8 @@ class WordstatProvider(ABC):
     таймаут и перевод ошибок в `AuthRequired` / `ProviderError` — здесь, общие
     для всех. Подкласс задаёт `name` (ключ в `providers.PROVIDERS` и имя
     credential), `summary` (строка для --help), `credential_fields`, адрес и
-    параметры (`_params`), разбор ошибки (`_api_error`) и ответа (`_parse`).
+    параметры (`_params`), разбор ошибки (`_api_error`) и ответа (`_parse`) —
+    последние два без доступов и сети, чтобы разбирать и ответы из журнала.
     На `AuthRequired` / `ProviderError` `WordstatClient` переключается на
     следующий провайдер очереди.
     """
@@ -86,12 +87,14 @@ class WordstatProvider(ABC):
     def _params(self, query_sent: str, lr: int) -> dict:
         """Параметры GET-запроса: доступы, запрос с оператором, регион."""
 
+    @classmethod
     @abstractmethod
-    def _api_error(self, data: dict) -> ApiError | None:
+    def _api_error(cls, data: dict) -> ApiError | None:
         """Ошибка в теле ответа, или None, если ответ с данными."""
 
+    @classmethod
     @abstractmethod
-    def _parse(self, data: dict) -> tuple[int, list[dict], list[dict]]:
+    def _parse(cls, data: dict) -> tuple[int, list[dict], list[dict]]:
         """(частота, похожие, ассоциации) — записи как {"text", "value"}."""
 
     def _http(self) -> httpx.AsyncClient:
@@ -107,6 +110,10 @@ class WordstatProvider(ABC):
 
     async def fetch(self, query: str, freq_type: FreqType, lr: int) -> WordstatResult:
         """Частота и похожие запросы для одного запроса и типа частоты."""
+        return self.to_result(await self.fetch_raw(query, freq_type, lr), query, freq_type)
+
+    async def fetch_raw(self, query: str, freq_type: FreqType, lr: int) -> dict:
+        """Сырой JSON-ответ (с данными или «ничего не найдено»); сбои — AuthRequired / ProviderError."""
         query_sent = freq_type.apply(query)
         where = f"'{query_sent}' lr={lr}"
         last_error = "нет ответа"
@@ -131,15 +138,9 @@ class WordstatProvider(ABC):
                         last_error = "ответ не JSON"
                     else:
                         error = self._api_error(data)
-                        if error is None:
-                            result = self._result(data, query, freq_type)
-                            log.info("%s %s → %d (попытка %d)", self.name, where, result.total_value, attempt)
-                            return result
-                        if error.kind == "empty":
-                            return WordstatResult(
-                                query=query, freq_type=freq_type, total_value=0, popular=[], associations=[],
-                                provider=self.name,
-                            )  # fmt: skip
+                        if error is None or error.kind == "empty":
+                            log.info("%s %s — ответ получен (попытка %d)", self.name, where, attempt)
+                            return data
                         if error.kind == "auth":
                             raise AuthRequired(self.name)
                         if error.kind == "fatal":
@@ -152,15 +153,18 @@ class WordstatProvider(ABC):
 
         raise ProviderError(self.name, f"{where}: {last_error} после {_MAX_ATTEMPTS} попыток")
 
-    def _result(self, data: dict, query: str, freq_type: FreqType) -> WordstatResult:
-        total, popular, associations = self._parse(data)
+    @classmethod
+    def to_result(cls, data: dict, query: str, freq_type: FreqType) -> WordstatResult:
+        """Разобрать ответ из `fetch_raw` — живой или из журнала; «ничего не найдено» → частота 0."""
+        error = cls._api_error(data)
+        total, popular, associations = (0, [], []) if error is not None else cls._parse(data)
         return WordstatResult(
             query=query,
             freq_type=freq_type,
             total_value=total,
             popular=_entries(popular),
             associations=_entries(associations),
-            provider=self.name,
+            provider=cls.name,
         )
 
 

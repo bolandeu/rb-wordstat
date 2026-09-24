@@ -18,10 +18,11 @@ from .test_cli import invoke, invoke_json
 class FakeProvider(WordstatProvider):
     """Провайдер без HTTP: отвечает частотой по типу или падает с заданной ошибкой."""
 
+    name = "fake"
     url = "unused"
 
     def __init__(self, name: str, fail: Exception | None = None) -> None:
-        self.name = name  # ty: ignore[invalid-attribute-access]
+        self.name = name
         self.fail = fail
         self.calls: list[tuple[str, FreqType]] = []
         self._client = None
@@ -29,17 +30,19 @@ class FakeProvider(WordstatProvider):
     def _params(self, query_sent: str, lr: int) -> dict:
         return {}
 
-    def _api_error(self, data: dict):
+    @classmethod
+    def _api_error(cls, data: dict):
         return None
 
-    def _parse(self, data: dict):
-        return 0, [], []
+    @classmethod
+    def _parse(cls, data: dict):
+        return data["total"], [{"text": data["query"] + " купить", "value": 10}], [{"text": "ассоциация", "value": 5}]
 
-    async def fetch(self, query: str, freq_type: FreqType, lr: int) -> WordstatResult:
+    async def fetch_raw(self, query: str, freq_type: FreqType, lr: int) -> dict:
         self.calls.append((query, freq_type))
         if self.fail is not None:
             raise self.fail
-        return result(query, freq_type, provider=self.name)
+        return {"total": 100, "query": query}
 
 
 def result(query: str, freq_type: FreqType, *, provider: str = "fake", total: int = 100) -> WordstatResult:
@@ -194,8 +197,17 @@ def test_csv_modes(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
 def fake_search(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     calls: list[dict] = []
 
-    def fake(queries, *, freq, lr, providers):
-        calls.append({"queries": queries, "freq": freq, "lr": lr, "providers": providers})
+    def fake(queries, *, freq, lr, providers, use_cache=False, max_age=None):
+        calls.append(
+            {
+                "queries": queries,
+                "freq": freq,
+                "lr": lr,
+                "providers": providers,
+                "use_cache": use_cache,
+                "max_age": max_age,
+            }
+        )
         return [result(q, f) for q in queries for f in freq]
 
     monkeypatch.setattr(services, "search", fake)

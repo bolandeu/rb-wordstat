@@ -31,7 +31,10 @@ text agents read as this CLI's API contract.
   (`name`, `summary`, `url`, `_params`, `_api_error`, `_parse`). The base
   class owns HTTP, retries, the timeout and mapping every vendor failure to
   `AuthRequired` / `ProviderError` — that is what `WordstatClient` switches
-  to the next provider in the queue on, per (query, freq type) pair
+  to the next provider in the queue on, per (query, freq type) pair.
+  `_api_error` / `_parse` are classmethods so journal entries parse without
+  credentials. The response journal (`core/cache.py`, SQLite `wordstat.db`,
+  every raw answer, read only with `--cache`) lives in `WordstatClient`
   (`--provider a,b`, project `providers = [...]`, default `["xmlriver"]`).
   Tests inject `httpx.MockTransport` via the provider's `transport`
   argument. Never call `httpx` from `core/` or `commands/`.

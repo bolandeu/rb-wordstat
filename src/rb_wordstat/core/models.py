@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator
@@ -51,6 +52,8 @@ class WordstatResult(BaseModel):
     popular: list[WordstatEntry]  # похожие запросы
     associations: list[WordstatEntry]  # ассоциированные запросы
     provider: str = ""  # какой провайдер из очереди ответил
+    fetched_at: datetime | None = None  # когда провайдер отдал этот ответ
+    from_cache: bool = False  # взят из журнала (--cache), а не живым запросом
 
 
 class WordstatParams(BaseModel):

@@ -23,7 +23,8 @@ class XmlRiverProvider(WordstatProvider):
     def _params(self, query_sent: str, lr: int) -> dict:
         return {"user": self._credential["user"], "key": self._credential["token"], "query": query_sent, "regions": lr}
 
-    def _api_error(self, data: dict) -> ApiError | None:
+    @classmethod
+    def _api_error(cls, data: dict) -> ApiError | None:
         if "error" not in data:
             return None
         message = f"ошибка {data.get('code')}: {data['error']}"
@@ -37,6 +38,7 @@ class XmlRiverProvider(WordstatProvider):
             return ApiError("auth", message)
         return ApiError("retry" if code in _RETRY_ERRORS else "fatal", message)
 
-    def _parse(self, data: dict) -> tuple[int, list[dict], list[dict]]:
+    @classmethod
+    def _parse(cls, data: dict) -> tuple[int, list[dict], list[dict]]:
         table = data.get("table", {}).get("tableData", {})
         return to_int(data.get("totalValue") or 0), table.get("popular", []), table.get("associations", [])

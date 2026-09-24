@@ -29,6 +29,12 @@ write them at release time.
   поле `provider`.
 - Команды `doctor`, `status`, `init`, `config`, `auth`, `skill`, флаг `--ai`;
   справка на русском.
+- Журнал всех ответов провайдеров, как у serp: SQLite `wordstat.db` в папке
+  данных приложения (вся история, сжатый JSON без логина и ключа, путь —
+  `WORDSTAT_DB_PATH`); `search --cache`, `--max-age`, `--force`; команды
+  `wordstat cache info|list|clear` (`clear` — с `--dry-run` / `--confirm`).
+  `--cache` берёт ответ только провайдеров из очереди `--provider`, в её
+  порядке. У результата — `fetched_at` и `from_cache`.
 
 ### Removed
 

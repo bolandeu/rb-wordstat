@@ -23,6 +23,14 @@ def isolated_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("rb_wordstat.credentials.manager.keyring.get_password", lambda service, username: None)
 
 
+@pytest.fixture(autouse=True)
+def isolated_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Every test gets its own empty response journal instead of the real wordstat.db."""
+    db_path = tmp_path / "wordstat-journal" / "wordstat.db"
+    monkeypatch.setenv("WORDSTAT_DB_PATH", str(db_path))
+    return db_path
+
+
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
