@@ -1,0 +1,36 @@
+{
+ "totalValue": 97993,
+ "table": {
+  "tableData": {
+   "popular": [
+    {
+     "isAssociations": false,
+     "value": "97993",
+     "text": "купить диван"
+    },
+    {
+     "isAssociations": false,
+     "value": "29549",
+     "text": "купить диван в москве"
+    },
+    {
+     "isAssociations": false,
+     "value": "13624",
+     "text": "купить диван недорого"
+    }
+   ],
+   "associations": [
+    {
+     "isAssociations": true,
+     "value": "19652",
+     "text": "мебельный магазин"
+    },
+    {
+     "isAssociations": true,
+     "value": "10609",
+     "text": "диванчик"
+    }
+   ]
+  }
+ }
+}

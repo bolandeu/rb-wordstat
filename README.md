@@ -1,294 +1,162 @@
-# rb-wordstat
+# wordstat
 
-Снятие частот и парсинг Яндекс.Wordstat через XML River API.
-Три режима использования: **библиотека**, **CLI**, **MCP-сервер**.
-
----
+Частоты Яндекс.Wordstat (базовая, фразовая, точная, точная с порядком) и похожие
+запросы / ассоциации через провайдеров [XML River](https://xmlriver.com) и
+[XMLStock](https://xmlstock.com) с фолбэком. Работает как CLI (`wordstat search ...`) и как
+Python-библиотека (`from rb_wordstat import WordstatClient`). Python-пакет — `rb-wordstat`
+(импорт `rb_wordstat`), команда в терминале — `wordstat`.
 
 ## Установка
 
 ```bash
-# Из директории проекта
-uv sync --all-extras
-
-# Запуск через uv
-uv run rb-wordstat search "купить диван"
-
-# Или через алиас (после source ~/.zshrc)
-wordstat search "купить диван"
+uv tool install "git+https://github.com/bolandeu/wordstat.git"
 ```
 
----
+Одинаково на macOS, Linux и Windows; обновление — `uv tool upgrade rb-wordstat`, конкретная
+версия — `...wordstat.git@v0.2.0`.
 
-## Credentials
+**Репозиторий приватный.** `uv` ходит в git так же, как `git clone`. Если установка
+падает с ошибкой авторизации — один раз `gh auth login` (или `gh auth setup-git`, если
+`gh` залогинен через `--with-token`), либо SSH-вариант:
 
-Файл: `~/Projects/_shared/credentials/.env.shared`
-
+```bash
+uv tool install "git+ssh://git@github.com/bolandeu/wordstat.git"
 ```
-XMLRIVER_USER=9358
-XMLRIVER_TOKEN=5c8353083fde7a2c1331726b29c3843d6caecfe3
+
+Как зависимость другого проекта: `uv add "rb-wordstat @ git+https://github.com/bolandeu/wordstat.git"`.
+
+## Доступы
+
+Доступы XML River и XMLStock **общие с CLI [serp](https://github.com/bolandeu/serp)**: если
+`serp auth login` уже был, wordstat их видит и ничего настраивать не нужно. Порядок поиска
+для каждого поля (`user`, `token`):
+
+1. свои: env `WORDSTAT_<PROVIDER>_<FIELD>` → keychain `wordstat:<provider>`;
+2. общие с serp: env `SERP_<PROVIDER>_<FIELD>` → keychain `serp:<provider>`;
+3. только XML River: старые `XMLRIVER_USER` / `XMLRIVER_TOKEN`.
+
+```bash
+wordstat auth status --provider xmlstock   # найдены ли доступы
+wordstat auth login --provider xmlriver    # свои, если нужны отдельно от serp
+wordstat doctor                            # общая диагностика
 ```
 
-Загружается автоматически из `.env` (симлинк на `.env.shared`).
+`token` у XMLStock — это `key` из кабинета. `.env`-файлы больше не читаются.
 
----
+## CLI
 
-## Операторы частоты
+```bash
+wordstat                      # версия + список команд
+wordstat search --help        # все опции
+wordstat --ai                 # памятка для AI-агентов
+```
 
-| Атрибут | Оператор | Пример | Описание |
-|---------|----------|--------|----------|
-| `broad` | без оператора | `купить диван` | Базовая (широкое соответствие) |
-| `phrase` | `"..."` | `"купить диван"` | Фразовая (фиксирует слова) |
-| `exact` | `"!слово !слово"` | `"!купить !диван"` | Точная словоформа, любой порядок |
-| `exact-ord` | `"[!слово !слово]"` | `"[!купить !диван]"` | Точная словоформа + порядок слов |
+| Опция | Коротко | По умолчанию | Описание |
+| --- | --- | --- | --- |
+| `--freq` | `-f` | `broad` | `broad`, `phrase`, `exact`, `exact-ord`, `all`; через запятую или повтором флага |
+| `--lr` | | `213` (Москва) | код региона Яндекса |
+| `--provider` | `-p` | `xmlriver` | очередь провайдеров через запятую, см. ниже |
+| `--json` | | | конверт `{"ok": true, "count": N, "results": [...]}` в stdout |
+| `--output` | `-o` | | дополнительно сохранить: `.csv` → CSV (см. `--csv-mode`), иначе JSON |
+| `--csv-mode` | | `auto` | `freq` / `keywords` / `auto` (freq при нескольких типах, иначе keywords) |
+| `--no-keywords` | | | в консоли только частоты |
 
----
-
-## Режим 1: CLI
-
-### Базовый запрос
+| Тип | Оператор | Пример |
+| --- | --- | --- |
+| `broad` | без операторов | `купить диван` |
+| `phrase` | кавычки | `"купить диван"` |
+| `exact` | `!` на каждое слово | `"!купить !диван"` |
+| `exact-ord` | `!` + порядок | `"[!купить !диван]"` |
 
 ```bash
 wordstat search "купить диван"
-```
-
-Вывод: частота (broad) + таблица похожих запросов + таблица ассоциаций.
-
-### Все параметры
-
-| Параметр | Короткий | По умолчанию | Значения | Описание |
-|----------|----------|--------------|----------|----------|
-| `--freq` | `-f` | `broad` | `broad` / `phrase` / `exact` / `exact-ord` / `all` | Тип(ы) частоты — через запятую или несколько флагов |
-| `--lr` | — | `213` | целое число | Код региона Яндекса |
-| `--format` | `-F` | `table` | `table` / `json` | Формат вывода в консоль |
-| `--output` | `-o` | — | путь к файлу | Сохранить результат |
-| `--csv-mode` | — | `auto` | `auto` / `freq` / `keywords` | Режим CSV при сохранении |
-| `--no-keywords` | — | выкл | флаг | Только частоты, без похожих/ассоциаций в консоли |
-
-### Синтаксис `--freq`
-
-```bash
-# Один тип
-wordstat search "запрос" --freq broad
-
-# Несколько через запятую (рекомендуется)
-wordstat search "запрос" --freq broad,phrase,exact
-
-# Несколько через повторение флага
-wordstat search "запрос" --freq broad --freq phrase --freq exact
-
-# Все 4 типа
-wordstat search "запрос" --freq all
-```
-
-### Примеры
-
-```bash
-# Базовая частота + похожие + ассоциации
-wordstat search "купить диван"
-
-# Все 4 вида частоты, только числа (без похожих)
 wordstat search "купить диван" --freq all --no-keywords
-
-# Выборочные виды через запятую
-wordstat search "купить диван" --freq broad,phrase,exact
-
-# Несколько запросов сразу
-wordstat search "диван" "кресло" "стол" --freq broad,phrase
-
-# С регионом (Санкт-Петербург)
-wordstat search "доставка еды" --lr 2
-
-# Подавить лог
-wordstat search "купить диван" 2>/dev/null
-
-# Сохранить полные данные в JSON
-wordstat search "купить диван" --output results.json
-
-# Сохранить таблицу частот в CSV (при --freq all)
+wordstat search "диван" "кресло" "стол" --freq broad,phrase --lr 2
+wordstat search "купить диван" -p xmlstock,xmlriver
 wordstat search "купить диван" --freq all --output freq.csv
-
-# Сохранить похожие/ассоциации в CSV
 wordstat search "купить диван" --output keywords.csv --csv-mode keywords
+wordstat search "купить диван" --json | jq '.results[].total_value'
 ```
 
-### Форматы CSV
+CSV `freq`: `query,freq_type,freq_label,operator,total_value`. CSV `keywords`:
+`source_query,type,keyword,value` — похожие (`popular`) и ассоциации (`assoc`), только
+из результатов `broad`.
 
-| `--csv-mode` | Колонки | Когда использовать |
-|---|---|---|
-| `freq` | `query, freq_type, freq_label, operator, total_value` | Сравнение частот по операторам |
-| `keywords` | `source_query, type, keyword, value` | Сбор похожих/ассоциаций для SEO |
-| `auto` | автовыбор | `freq` при >1 типах, `keywords` при только broad |
+**Куда что пишется.** stdout — только данные (таблицы или JSON-конверт); ошибки, логи и
+`--verbose` — в stderr. Под `--json` ошибка тоже приходит JSON-ом:
+`{"ok": false, "error": {"code", "message", "action"}}`.
 
-> `--csv-mode keywords` работает только если в `--freq` есть `broad`.
+**Коды выхода:** `0` ок · `1` прочее · `2` неверные аргументы · `3` нужна авторизация ·
+`4` проект не инициализирован · `5` сбой провайдера (сеть, деньги, лимиты — уже с
+повторами) · `6` CLI старее, чем требует проект.
 
----
+Частота 0 — это «запрос не ищут», а не сбой: сбой всегда даёт код 3 или 5.
 
-## Режим 2: Python-библиотека
+### Провайдеры и фолбэк
 
-### Быстрый старт
+`--provider a,b` — очередь: для каждой пары (запрос, тип частоты) первый провайдер
+основной, следующий пробуется, только если предыдущий упал (`AUTH_REQUIRED` /
+`PROVIDER_ERROR`). Отказали все → ошибка. В `--json` у каждого результата есть
+`provider` — кто ответил.
 
-```python
-from rb_wordstat import WordstatClient, WordstatParams, FreqType
+| Провайдер | Эндпоинт | Похожих запросов |
+| --- | --- | --- |
+| `xmlriver` | `xmlriver.com/wordstat/new/json` | до 200 |
+| `xmlstock` | `xmlstock.com/wordstat/json/` | до 200 (`groupby=200`, без него 2000) |
 
-client = WordstatClient()
-results = client.search_sync(WordstatParams(query="купить диван"))
+Частоты у обоих совпадают (проверено 2026-09-24 на «купить диван», Москва).
 
-for r in results:
-    print(r.total_value)
-    for kw in r.popular:
-        print(kw.text, kw.value)
-```
-
-### WordstatParams — все параметры
-
-```python
-WordstatParams(
-    query="купить диван",     # str или list[str] — один или несколько запросов
-    lr=213,                   # код региона Яндекса (213 = Москва)
-    freq=[FreqType.broad],    # список типов частоты
-)
-```
-
-### FreqType — операторы
-
-```python
-FreqType.broad      # базовая — без операторов
-FreqType.phrase     # фразовая — "запрос"
-FreqType.exact      # точная — "!слово !слово"
-FreqType.exact_ord  # точная+порядок — "[!слово !слово]"
-```
-
-### WordstatResult — поля
-
-```python
-r.query          # str — оригинальный запрос (без операторов)
-r.freq_type      # FreqType — тип частоты
-r.total_value    # int — частота запроса
-r.popular        # list[WordstatEntry] — похожие запросы
-r.associations   # list[WordstatEntry] — ассоциированные запросы
-
-# WordstatEntry:
-entry.text       # str — текст запроса
-entry.value      # int — частота
-```
-
-### Примеры
-
-```python
-from rb_wordstat import WordstatClient, WordstatParams, FreqType
-
-client = WordstatClient()
-
-# Все 4 вида частоты для одного запроса
-results = client.search_sync(WordstatParams(
-    query="купить угловой диван",
-    freq=[FreqType.broad, FreqType.phrase, FreqType.exact, FreqType.exact_ord],
-))
-for r in results:
-    print(f"{r.freq_type.label}: {r.total_value}")
-
-# Несколько запросов
-results = client.search_sync(WordstatParams(
-    query=["диван", "кресло", "стол"],
-    freq=[FreqType.broad, FreqType.phrase],
-    lr=213,
-))
-
-# Собрать похожие запросы (из broad)
-broad = next(r for r in results if r.freq_type == FreqType.broad)
-for kw in broad.popular:
-    print(kw.text, kw.value)
-```
-
-### Асинхронный режим
-
-```python
-import asyncio
-from rb_wordstat import WordstatClient, WordstatParams, FreqType
-
-async def main():
-    client = WordstatClient()
-    results = await client.search(WordstatParams(
-        query=["купить диван", "угловой диван"],
-        freq=[FreqType.broad, FreqType.exact],
-    ))
-    for r in results:
-        print(r.query, r.freq_type.label, r.total_value)
-
-asyncio.run(main())
-```
-
-### Отключить лог
-
-```python
-from loguru import logger
-logger.disable("rb_wordstat")
-```
-
----
-
-## Режим 3: MCP-сервер
-
-Регистрация в `~/.claude/claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "rb-wordstat": {
-      "type": "stdio",
-      "command": "uv",
-      "args": [
-        "run",
-        "--project",
-        "/Users/bolandau/Projects/_shared/libs/rb-wordstat",
-        "rb-wordstat",
-        "mcp"
-      ]
-    }
-  }
-}
-```
-
-### Инструмент: `search_wordstat`
-
-| Параметр | Тип | По умолчанию | Описание |
-|----------|-----|--------------|----------|
-| `query` | `string` или `array` | обязательный | Запрос или список запросов |
-| `lr` | `integer` | `213` | Код региона Яндекса |
-| `freq` | `array` | `["broad"]` | Типы частоты: `broad`, `phrase`, `exact`, `exact_ord` |
-
-Возвращает JSON-массив объектов `WordstatResult`.
-
-### Как формулировать запросы в чате
-
-```
-Сними частоту Wordstat для "купить диван"
-Сравни все виды частоты для "угловой диван" — broad, phrase, exact и exact_ord
-Собери похожие запросы и ассоциации для "растаможка авто", регион 213
-Сними частоту для "диван", "кресло", "стол" — только broad и phrase
-Покажи точную частоту "[!купить !угловой !диван]" в Яндексе
-```
-
----
-
-## Коды регионов Яндекса
-
-| Регион | lr |
-|--------|-----|
-| Москва | 213 |
-| Санкт-Петербург | 2 |
-| Краснодар | 35 |
-| Новосибирск | 65 |
-| Екатеринбург | 54 |
-| Вся Россия | 225 |
-
-Полный список: https://xmlriver.com/userfiles/files/yandex_geo.csv
-
----
-
-## Тестирование MCP
+Очередь можно закрепить за проектом (папкой):
 
 ```bash
-npx @modelcontextprotocol/inspector uv run --project /Users/bolandau/Projects/_shared/libs/rb-wordstat rb-wordstat mcp
+wordstat init                                   # создаёт .wordstat/config.toml
+wordstat config set providers "xmlstock,xmlriver"
 ```
+
+## Python-библиотека
+
+```python
+from rb_wordstat import FreqType, WordstatClient, WordstatParams
+
+client = WordstatClient()  # очередь по умолчанию: ["xmlriver"]
+# client = WordstatClient(providers=["xmlstock", "xmlriver"])
+params = WordstatParams(query=["купить диван", "кресло"], lr=213, freq=[FreqType.broad, FreqType.exact])
+results = client.search_sync(params)
+# async: results = await client.search(params)
+
+for r in results:
+    print(r.query, r.freq_type.label, r.total_value, r.provider)
+    for entry in r.popular[:5]:
+        print("  ", entry.text, entry.value)
+```
+
+`WordstatResult`: `query`, `freq_type`, `total_value`, `popular` и `associations`
+(списки `WordstatEntry(text, value)`), `provider`.
+
+Ошибки — исключения `rb_wordstat.AuthRequired` и `rb_wordstat.ProviderError` (у обоих
+`.message` и `.action`). Логи — стандартный `logging`, логгер `rb_wordstat`:
+`logging.getLogger("rb_wordstat").setLevel(logging.ERROR)` чтобы заглушить.
+
+## Новый провайдер
+
+1. `src/rb_wordstat/providers/<name>.py` — подкласс `WordstatProvider` с `name`,
+   `summary`, `url` и тремя методами: `_params` (GET-параметры), `_api_error` (ошибка в
+   теле → `ApiError` с видом `auth` / `retry` / `fatal` / `empty`) и `_parse` (частота,
+   похожие, ассоциации как `{"text", "value"}`). HTTP, повторы и перевод ошибок в
+   `AuthRequired` / `ProviderError` — в базовом классе.
+2. Добавить класс в `PROVIDERS` в `src/rb_wordstat/providers/__init__.py`.
+
+После этого он доступен в `--provider`, `wordstat auth login --provider <name>` и `doctor`.
+
+## Разработка
+
+```bash
+uv sync
+uv run wordstat --help
+uv run ruff check . && uv run ruff format --check . && uv run ty check && uv run pytest
+scripts/install_hooks.sh      # pre-commit: предупреждает об устаревших docstring команд
+uv tool install --editable .  # глобальная команда из рабочей копии
+```
+
+Релиз: `uv run scripts/release.py patch|minor|major` — поднимает версию, датирует
+`CHANGELOG.md`, коммитит, ставит тег и пушит. Версию руками не править.

@@ -1,6 +1,16 @@
-"""rb-wordstat — Яндекс.Wordstat клиент: библиотека, CLI и MCP-сервер."""
-from .core.client import WordstatClient
-from .core.models import FreqType, WordstatEntry, WordstatParams, WordstatResult
+"""rb-wordstat — частоты Яндекс.Wordstat: CLI `wordstat` и библиотека."""
 
-__version__ = "0.1.0"
-__all__ = ["WordstatClient", "WordstatParams", "WordstatResult", "WordstatEntry", "FreqType"]
+from .core.client import WordstatClient
+from .core.errors import AuthRequired, ProviderError
+from .core.models import ALL_FREQ_TYPES, FreqType, WordstatEntry, WordstatParams, WordstatResult
+
+__all__ = [
+    "ALL_FREQ_TYPES",
+    "AuthRequired",
+    "FreqType",
+    "ProviderError",
+    "WordstatClient",
+    "WordstatEntry",
+    "WordstatParams",
+    "WordstatResult",
+]

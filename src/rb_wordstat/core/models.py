@@ -1,27 +1,23 @@
 from __future__ import annotations
 
-from enum import Enum
-from pydantic import BaseModel
+from enum import StrEnum
+
+from pydantic import BaseModel, Field, field_validator
 
 
-class FreqType(str, Enum):
-    broad = "broad"            # базовая — запрос без операторов
-    phrase = "phrase"          # фразовая — "запрос"
-    exact = "exact"            # точная — "!слово !слово"
-    exact_ord = "exact_ord"    # точная с порядком — "[!слово !слово]"
+class FreqType(StrEnum):
+    broad = "broad"  # базовая — запрос без операторов
+    phrase = "phrase"  # фразовая — "запрос"
+    exact = "exact"  # точная — "!слово !слово"
+    exact_ord = "exact_ord"  # точная с порядком — "[!слово !слово]"
 
     def apply(self, query: str) -> str:
         """Применяет оператор Яндекс.Wordstat к запросу."""
-        if self == FreqType.broad:
-            return query
-        elif self == FreqType.phrase:
+        if self == FreqType.phrase:
             return f'"{query}"'
-        elif self == FreqType.exact:
+        if self in (FreqType.exact, FreqType.exact_ord):
             inner = " ".join(f"!{w}" for w in query.split())
-            return f'"{inner}"'
-        elif self == FreqType.exact_ord:
-            inner = " ".join(f"!{w}" for w in query.split())
-            return f'"[{inner}]"'
+            return f'"[{inner}]"' if self == FreqType.exact_ord else f'"{inner}"'
         return query
 
     @property
@@ -35,19 +31,6 @@ class FreqType(str, Enum):
         return labels[self]
 
 
-class WordstatEntry(BaseModel):
-    text: str
-    value: int
-
-
-class WordstatResult(BaseModel):
-    query: str                         # оригинальный запрос (без операторов)
-    freq_type: FreqType                # тип частоты
-    total_value: int                   # totalValue из ответа API
-    popular: list[WordstatEntry]       # похожие запросы
-    associations: list[WordstatEntry]  # ассоциированные запросы
-
-
 ALL_FREQ_TYPES: list[FreqType] = [
     FreqType.broad,
     FreqType.phrase,
@@ -56,12 +39,49 @@ ALL_FREQ_TYPES: list[FreqType] = [
 ]
 
 
+class WordstatEntry(BaseModel):
+    text: str
+    value: int
+
+
+class WordstatResult(BaseModel):
+    query: str  # оригинальный запрос (без операторов)
+    freq_type: FreqType  # тип частоты
+    total_value: int  # частота запроса
+    popular: list[WordstatEntry]  # похожие запросы
+    associations: list[WordstatEntry]  # ассоциированные запросы
+    provider: str = ""  # какой провайдер из очереди ответил
+
+
 class WordstatParams(BaseModel):
     query: str | list[str]
-    lr: int = 213                          # 213 = Москва
-    freq: list[FreqType] = [FreqType.broad]
+    lr: int = 213  # 213 = Москва
+    freq: list[FreqType] = Field(default_factory=lambda: [FreqType.broad])
 
     def get_queries(self) -> list[str]:
         if isinstance(self.query, str):
             return [self.query]
         return self.query
+
+
+DEFAULT_PROVIDERS = ["xmlriver"]
+
+
+class CliCompat(BaseModel):
+    min_version: str = "0.1.0"
+
+
+class ProjectConfig(BaseModel):
+    version: int = 1
+    name: str
+    # Очередь провайдеров: первый — основной, остальные — фолбэки по порядку.
+    providers: list[str] = Field(default_factory=lambda: list(DEFAULT_PROVIDERS))
+    cli: CliCompat = Field(default_factory=CliCompat)
+
+    @field_validator("providers", mode="before")
+    @classmethod
+    def split_providers(cls, v: object) -> object:
+        # `config set providers "a,b"` приходит строкой.
+        if isinstance(v, str):
+            return [name.strip() for name in v.split(",") if name.strip()]
+        return v

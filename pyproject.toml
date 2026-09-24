@@ -1,26 +1,26 @@
 [project]
 name = "rb-wordstat"
 version = "0.1.0"
-description = "Яндекс.Wordstat парсер: библиотека, CLI и MCP-сервер"
+description = "Частоты Яндекс.Wordstat через провайдеров (XML River, XMLStock) с фолбэком: CLI wordstat и библиотека rb_wordstat"
+readme = "README.md"
+authors = [{ name = "bolandeu" }]
 requires-python = ">=3.11"
 dependencies = [
+    "typer>=0.12",
+    "pydantic>=2.6",
+    "rich>=13.7",
+    "platformdirs>=4.2",
+    "tomli-w>=1.0",
     "httpx>=0.27",
-    "pydantic>=2.0",
-    "loguru>=0.7",
-    "python-dotenv>=1.0",
-    "mcp[cli]>=1.26.0",
-    "click>=8.0",
-    "rich>=13.0",
+    "packaging>=24.0",
+    "keyring>=25.0",
 ]
 
-[project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
-
 [project.scripts]
-rb-wordstat = "rb_wordstat.cli:main"
+wordstat = "rb_wordstat.cli:main"
 
-[project.entry-points."mcp.servers"]
-rb-wordstat = "rb_wordstat.mcp_server:serve"
+[project.urls]
+Repository = "https://github.com/bolandeu/wordstat"
 
 [build-system]
 requires = ["hatchling"]
@@ -29,5 +29,40 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/rb_wordstat"]
 
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "ty>=0.0.80",
+]
+
 [tool.pytest.ini_options]
-asyncio_mode = "strict"
+asyncio_mode = "auto"
+addopts = "--cov --cov-report=term-missing:skip-covered"
+
+[tool.coverage.run]
+source = ["src"]
+
+[tool.coverage.report]
+# The template ships at ~94%; keep the bar where it is instead of letting
+# new commands land untested. Raise it, never lower it.
+fail_under = 90
+show_missing = true
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "SIM", "RUF", "S"]
+# Тексты и комментарии на русском: кириллица — не «похожие символы».
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]                # assert is the point of a test
+"scripts/*" = ["S603", "S607"]      # subprocess with fixed argv lists (git, uv), no shell
+
+[tool.ruff.lint.flake8-bugbear]
+# Typer's `param: T = typer.Option(...)` style is a call in a default on purpose.
+extend-immutable-calls = ["typer.Option", "typer.Argument"]

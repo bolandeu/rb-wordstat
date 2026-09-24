@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python }}
+      - run: uv lock --check
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run ty check
+      - run: uv run pytest
+
+      # The distribution path — the same build+install `uv tool install "git+..."`
+      # performs on a user's machine. Catches packaging mistakes (missing
+      # package data, broken entry point) that `uv run` never notices.
+      - name: Install as a tool
+        shell: bash
+        run: |
+          uv tool install .
+          echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
+      - run: wordstat --version
+      - run: wordstat --ai
+      - run: wordstat doctor
+
+  audit:
+    # Known vulnerabilities in the locked dependency set (OSV-Scanner reads
+    # uv.lock natively). Dependabot opens the upgrade PRs; this is what
+    # fails the build until they're merged. Locally: `osv-scanner --lockfile=uv.lock`.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google/osv-scanner-action/osv-scanner-action@v2.6.0
+        with:
+          scan-args: |-
+            --lockfile=uv.lock
