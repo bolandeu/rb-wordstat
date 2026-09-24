@@ -1,0 +1,12 @@
+{
+    "mcpServers": {
+        "rb-wordstat": {
+            "type": "stdio",
+            "command": "sh",
+            "args": [
+                "-c",
+                "uv run --project ~/Projects/_shared/libs/rb-wordstat rb-wordstat mcp"
+            ]
+        }
+    }
+}
