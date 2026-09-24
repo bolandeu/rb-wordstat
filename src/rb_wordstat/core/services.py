@@ -60,7 +60,7 @@ def load_config(project_root: Path, *, check_compat: bool = True) -> ProjectConf
     Only `doctor` passes `check_compat=False` — it reports the mismatch as
     one of its checks instead of failing on it.
     """
-    data = tomllib.loads(config_path(project_root).read_text())
+    data = tomllib.loads(config_path(project_root).read_text(encoding="utf-8"))
     config = ProjectConfig.model_validate(data)
     if check_compat:
         check_cli_compat(config)
@@ -70,7 +70,7 @@ def load_config(project_root: Path, *, check_compat: bool = True) -> ProjectConf
 def save_config(project_root: Path, config: ProjectConfig) -> None:
     path = config_path(project_root)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(tomli_w.dumps(config.model_dump()))
+    path.write_text(tomli_w.dumps(config.model_dump()), encoding="utf-8")
 
 
 def init_project(project_root: Path, name: str) -> ProjectConfig:

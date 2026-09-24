@@ -44,6 +44,7 @@ write them at release time.
   0 без повторов.
 - Неверный ключ XML River больше не повторяется впустую 3 раза.
 - Windows: `skill install` и `--ai` читают и пишут SKILL.md в UTF-8
-  (кириллица падала в кодировке по умолчанию cp1252).
+  (кириллица падала в кодировке по умолчанию cp1252); `.wordstat/config.toml`
+  тоже всегда в UTF-8.
 - Зависимости в `uv.lock` обновлены до версий без известных уязвимостей
   (anyio, cryptography, idna, pygments, pytest) — аудит OSV-Scanner в CI.
