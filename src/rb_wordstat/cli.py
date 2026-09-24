@@ -55,7 +55,7 @@ def _ai_callback(value: bool) -> None:
     """
     if not value:
         return
-    content = resources.files(f"{_PACKAGE_NAME}.data").joinpath("SKILL.md").read_text()
+    content = resources.files(f"{_PACKAGE_NAME}.data").joinpath("SKILL.md").read_text(encoding="utf-8")
     typer.echo(content)
     raise typer.Exit()
 

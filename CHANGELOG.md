@@ -43,3 +43,7 @@ write them at release time.
   (3) / `PROVIDER_ERROR` (5). Код 15 XML River («нет результатов») — частота
   0 без повторов.
 - Неверный ключ XML River больше не повторяется впустую 3 раза.
+- Windows: `skill install` и `--ai` читают и пишут SKILL.md в UTF-8
+  (кириллица падала в кодировке по умолчанию cp1252).
+- Зависимости в `uv.lock` обновлены до версий без известных уязвимостей
+  (anyio, cryptography, idna, pygments, pytest) — аудит OSV-Scanner в CI.

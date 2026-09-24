@@ -26,7 +26,7 @@ _TOOL_TARGETS = {
 
 
 def _skill_content() -> str:
-    return resources.files(f"{_PACKAGE_NAME}.data").joinpath("SKILL.md").read_text()
+    return resources.files(f"{_PACKAGE_NAME}.data").joinpath("SKILL.md").read_text(encoding="utf-8")
 
 
 @app.command("install")
@@ -54,7 +54,7 @@ def install(
     target_dir = _TOOL_TARGETS[tool][scope]
     target_dir.mkdir(parents=True, exist_ok=True)
     target_path = target_dir / "SKILL.md"
-    target_path.write_text(_skill_content())
+    target_path.write_text(_skill_content(), encoding="utf-8")
 
     output.emit_success(
         ctx,
