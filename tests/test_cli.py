@@ -257,5 +257,5 @@ def test_skill_install_writes_to_project_dir(tmp_path: Path, monkeypatch: pytest
     assert code == 0
     installed = tmp_path / ".claude" / "skills" / "wordstat" / "SKILL.md"
     assert installed.is_file()
-    assert "wordstat" in installed.read_text()
+    assert "wordstat" in installed.read_text(encoding="utf-8")
     assert payload["path"] == str(installed)
