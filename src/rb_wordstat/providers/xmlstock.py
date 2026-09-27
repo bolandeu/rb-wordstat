@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+
+from ..core.errors import AuthRequired, ProviderError
 from .base import ApiError, WordstatProvider, to_int
 
 # Неверный user/key. Других кодов XMLStock не публикует — их повторяем.
@@ -19,6 +22,25 @@ class XmlStockProvider(WordstatProvider):
     name = "xmlstock"
     summary = "XMLStock"
     url = "https://xmlstock.com/wordstat/json/"
+    balance_url = "https://xmlstock.com/api/"
+    # Запасной провайдер: без его доступов wordstat работает через xmlriver.
+    required = False
+
+    def _balance_params(self) -> dict:
+        return {"do": "balance", "user": self._credential["user"], "key": self._credential["token"]}
+
+    def _parse_balance(self, text: str) -> float:
+        # {"balance": 123.4} либо строка ERROR_… (ERROR_USER / ERROR_KEY — неверный доступ).
+        try:
+            data = json.loads(text)
+        except ValueError:
+            data = None
+        if isinstance(data, dict) and isinstance(data.get("balance"), int | float):
+            return float(data["balance"])
+        answer = text.strip()
+        if answer.startswith("ERROR_") and ("KEY" in answer or "USER" in answer):
+            raise AuthRequired(self.name)
+        raise ProviderError(self.name, f"баланс: неожиданный ответ ({answer[:100]!r})")
 
     def _params(self, query_sent: str, lr: int) -> dict:
         return {

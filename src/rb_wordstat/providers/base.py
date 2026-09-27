@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import logging
-import os
+import pkgutil
 from abc import ABC, abstractmethod
-from typing import ClassVar
+from dataclasses import dataclass
+from datetime import datetime
+from typing import ClassVar, Literal
 
 import httpx
 
@@ -17,9 +20,107 @@ log = logging.getLogger(__name__)
 _MAX_ATTEMPTS = 3
 _RETRY_DELAY = 1.0
 _RETRY_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
-# Доступы XML River / XMLStock общие с CLI serp: если своих нет, читаются его
-# записи (keychain serp:<provider>, env SERP_<PROVIDER>_<FIELD>).
-_SHARED_NAMESPACES = ("serp",)
+# health_check: один запрос без повторов, жёсткий предел (standard §8).
+HEALTH_TIMEOUT = 10.0
+
+# What a provider's own health check can conclude. `missing` and `unchecked`
+# are decided by `auth status` before a check ever runs.
+HealthStatus = Literal["ok", "invalid", "expired", "quota_exhausted", "unreachable"]
+
+
+@dataclass(frozen=True)
+class Quota:
+    remaining: int | None = None
+    limit: int | None = None
+    unit: str = "requests"
+
+
+@dataclass(frozen=True)
+class Health:
+    """Result of `Provider.health_check()`. Never put a credential value in `message`."""
+
+    status: HealthStatus = "ok"
+    expires_at: datetime | None = None
+    quota: Quota | None = None
+    message: str | None = None
+
+
+class Provider:
+    """Base for every external integration, whatever its transport.
+
+    A concrete provider sets `name` and `credential_fields` (the field names
+    it reads via `credentials.manager` under `credential_name`; `()` if it
+    needs none), `required`, `per_target` and `legacy_env` where they
+    differ, and must implement `health_check()` — `tests/test_providers.py`
+    fails for any provider that doesn't. `auth status --check` gets an
+    instance via `for_health_check()`: `cls()` by default; a provider whose
+    constructor needs arguments overrides it (building them from config/env).
+
+    Classes that are only bases for others set `abstract = True` in their own
+    body; everything else defined under `providers/` is discovered by
+    `all_providers()`, so there is no registry to forget to update.
+    """
+
+    abstract: ClassVar[bool] = True
+    name: ClassVar[str] = "default"
+    credential_fields: ClassVar[tuple[str, ...]] = ("api_key",)
+    # False for a provider the CLI works without: its missing credential is
+    # reported but doesn't fail `auth status` (a wrong one still does).
+    required: ClassVar[bool] = True
+    # True when the credential is per target (a site, host, account): one
+    # stored credential per target, named "<name>:<target>" — e.g.
+    # `auth login --provider deploy:example.com`. `auth status` reports each
+    # stored target separately and sets `target` before `health_check()`.
+    per_target: ClassVar[bool] = False
+    # Older env var names still honoured, field -> name, checked after
+    # <PACKAGE>_<PROVIDER>_<FIELD>. In a subclass keep the annotation (ruff RUF012):
+    #     legacy_env: ClassVar[dict[str, str]] = {"api_key": "XMLRIVER_TOKEN"}
+    # and read credentials with
+    # `manager.get_credential(self.credential_name, env_fields=..., legacy_env=self.legacy_env)`.
+    legacy_env: ClassVar[dict[str, str]] = {}
+    target: str | None = None
+
+    @classmethod
+    def for_health_check(cls, target: str | None = None) -> Provider:
+        """An instance for `auth status --check` (for `target`, if per-target)."""
+        provider = cls()
+        provider.target = target
+        return provider
+
+    @property
+    def credential_name(self) -> str:
+        """The key to read this provider's credential under in `credentials.manager`."""
+        return f"{self.name}:{self.target}" if self.per_target and self.target else self.name
+
+    def health_check(self) -> Health:
+        """One cheap, read-only, non-billed call proving the credential works.
+
+        Typically `self.get_json("/me")` (or whatever the API's cheapest
+        authenticated read is) then `return Health()`; add `expires_at` for
+        anything with a lifetime and `quota` if the API reports it. Just let
+        `AuthRequired` / `ProviderError` propagate — `auth status` maps them
+        to `invalid` / `unreachable`. It must finish within 10 s and not retry,
+        and it is the provider's own client timeout that guarantees it —
+        `auth status` runs no watchdog thread. `HttpProvider.probe()` makes
+        exactly one request with a 10 s httpx timeout; anything else passes
+        `credentials.health.CHECK_TIMEOUT` (10 s) to what it calls.
+        """
+        raise NotImplementedError(f"{type(self).__name__} must implement health_check()")
+
+
+def all_providers() -> list[type[Provider]]:
+    """Every concrete Provider subclass defined in this package, sorted by name."""
+    package = __name__.rsplit(".", 1)[0]
+    for module in pkgutil.iter_modules(importlib.import_module(package).__path__):
+        importlib.import_module(f"{package}.{module.name}")
+    found: set[type[Provider]] = set()
+    pending = list(Provider.__subclasses__())
+    while pending:
+        cls = pending.pop()
+        pending.extend(cls.__subclasses__())
+        if cls.__module__.startswith(f"{package}.") and not cls.__dict__.get("abstract", False):
+            found.add(cls)
+    return sorted(found, key=lambda cls: cls.name)
 
 
 class ApiError(Exception):
@@ -31,7 +132,7 @@ class ApiError(Exception):
         self.message = message
 
 
-class WordstatProvider(ABC):
+class WordstatProvider(Provider, ABC):
     """Провайдер частот Яндекс.Wordstat поверх HTTP JSON API.
 
     Один вызов `fetch` — один запрос × тип частоты. Повторы временных сбоев,
@@ -41,15 +142,20 @@ class WordstatProvider(ABC):
     параметры (`_params`), разбор ошибки (`_api_error`) и ответа (`_parse`) —
     последние два без доступов и сети, чтобы разбирать и ответы из журнала.
     На `AuthRequired` / `ProviderError` `WordstatClient` переключается на
-    следующий провайдер очереди.
+    следующий провайдер очереди. `health_check()` (для `auth status --check`) —
+    бесплатный запрос баланса: `_balance_params` и `_parse_balance` у подкласса.
     """
 
+    abstract = True
     name: ClassVar[str]
     summary: ClassVar[str] = ""
     url: ClassVar[str]
+    balance_url: ClassVar[str]
     credential_fields: ClassVar[tuple[str, ...]] = ("user", "token")
     # Устаревшие имена env-переменных по полям — последний источник доступов.
     legacy_env: ClassVar[dict[str, str]] = {}
+    # Тестовый шов для health_check (синхронный httpx.MockTransport).
+    health_transport: httpx.BaseTransport | None = None
 
     def __init__(
         self,
@@ -68,20 +174,40 @@ class WordstatProvider(ABC):
 
     @classmethod
     def load_credential(cls) -> dict[str, str] | None:
-        """Все `credential_fields`: свои env/keychain → общие с serp → legacy env. None, если не хватает."""
+        """Все `credential_fields`: свои env/keychain → общие с serp → legacy env. None, если не хватает.
+
+        Тот же поиск, что показывает `auth status` (`credentials.manager.locate_fields`).
+        """
         fields = list(cls.credential_fields)
-        found = credentials.get_credential(cls.name, env_fields=fields) or {}
-        for namespace in _SHARED_NAMESPACES:
-            if all(found.get(field) for field in fields):
-                break
-            shared = credentials.get_credential(cls.name, env_fields=fields, namespace=namespace) or {}
-            found = {**shared, **{k: v for k, v in found.items() if v}}
-        for field, env_name in cls.legacy_env.items():
-            if not found.get(field) and os.environ.get(env_name):
-                found[field] = os.environ[env_name]
-        if all(found.get(field) for field in fields):
-            return found
+        located = credentials.locate_fields(cls.name, fields, legacy_env=cls.legacy_env)
+        if all(field in located for field in fields):
+            return {field: value for field, (value, _, _) in located.items()}
         return None
+
+    def health_check(self) -> Health:
+        """Баланс счёта — бесплатный запрос, заодно проверка логина и ключа. Без повторов, до 10 с."""
+        try:
+            with httpx.Client(timeout=HEALTH_TIMEOUT, transport=self.health_transport) as client:
+                response = client.get(self.balance_url, params=self._balance_params())
+        except httpx.TransportError as exc:
+            raise ProviderError(self.name, f"баланс: {type(exc).__name__}") from None
+        if response.status_code in (401, 403):
+            raise AuthRequired(self.name)
+        if response.is_error:
+            raise ProviderError(self.name, f"баланс: HTTP {response.status_code}", status=response.status_code)
+        balance = self._parse_balance(response.text)
+        quota = Quota(remaining=int(balance), unit="rub")
+        if balance <= 0:
+            return Health(status="quota_exhausted", quota=quota, message=f"баланс {balance:g} ₽ — пополнить счёт")
+        return Health(quota=quota)
+
+    @abstractmethod
+    def _balance_params(self) -> dict:
+        """Параметры GET-запроса баланса к `balance_url`."""
+
+    @abstractmethod
+    def _parse_balance(self, text: str) -> float:
+        """Баланс в рублях; неверный доступ — AuthRequired, прочее — ProviderError."""
 
     @abstractmethod
     def _params(self, query_sent: str, lr: int) -> dict:

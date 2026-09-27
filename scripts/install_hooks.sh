@@ -1,17 +1,10 @@
 #!/usr/bin/env bash
-# (Re)install this repo's git hooks. .git/hooks/ is not tracked by git, so
-# hooks are lost on every fresh clone — re-run this after cloning, or any
-# time a hook seems to be missing.
+# Point git at the versioned hooks in .githooks/ (git never runs hooks from
+# the working tree on its own). One-time per clone; Claude Code sessions do
+# it automatically via the SessionStart hook in .claude/settings.json.
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
-hook_path="$repo_root/.git/hooks/pre-commit"
-
-cat > "$hook_path" <<'EOF'
-#!/usr/bin/env bash
-python3 "$(git rev-parse --show-toplevel)/scripts/check_command_docstrings.py"
-exit 0
-EOF
-
-chmod +x "$hook_path"
-echo "Installed pre-commit hook -> $hook_path"
+git -C "$repo_root" config core.hooksPath .githooks
+chmod +x "$repo_root"/.githooks/*
+echo "git hooks -> $repo_root/.githooks"

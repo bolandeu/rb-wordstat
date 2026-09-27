@@ -1,0 +1,20 @@
+
+ Usage: wordstat auth login [OPTIONS]
+
+ Сохранить доступы провайдера в связку ключей ОС.
+
+ Каждое поле берётся из переменной WORDSTAT_<PROVIDER>_<FIELD> (например
+ WORDSTAT_XMLSTOCK_USER, WORDSTAT_XMLSTOCK_TOKEN), если она задана, иначе
+ спрашивается. С --non-interactive недостающее поле — ошибка, а не вопрос.
+
+ Example: wordstat auth login --provider xmlstock
+
+╭─ Параметры ──────────────────────────────────────────────────────────────────────────────────────╮
+│ --provider               <str>  Провайдер. Доступны: xmlriver (XML River); xmlstock (XMLStock).  │
+│                                 [по умолчанию: xmlriver]                                         │
+│ --non-interactive               Никогда не спрашивать; при нехватке данных — ошибка.             │
+│ --json                          Машиночитаемый вывод: JSON в stdout.                             │
+│ --quiet                         Не печатать ничего, кроме данных.                                │
+│ --help                          Show this message and exit.                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

@@ -130,6 +130,8 @@ def search(
       wordstat search "купить диван" --output keywords.csv --csv-mode keywords
       wordstat search "купить диван" --cache --max-age 7d   # из журнала, если свежее недели
       wordstat search "купить диван" --json
+
+    Example: {cli} search "купить диван" --freq all --json
     """
     freq_types = services.resolve_freq(freq)
     providers = services.resolve_providers(provider, Path(ctx.obj.get("project") or Path.cwd()))

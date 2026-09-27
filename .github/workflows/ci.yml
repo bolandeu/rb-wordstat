@@ -1,5 +1,9 @@
 name: CI
 
+# Optional (tools/docs/standard-release.md §6): the authoritative gate is the
+# local `uv run scripts/release.py --check`, which every release runs anyway.
+# If kept, CI is one Linux job on the lowest supported Python repeating it on
+# a clean machine — delete this file to save Actions minutes on a private repo.
 on:
   push:
     branches: [main]
@@ -8,45 +12,26 @@ on:
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ["3.11", "3.13"]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+        with:
+          fetch-depth: 0 # tags: the build's version comes from them
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
           enable-cache: true
-          python-version: ${{ matrix.python }}
-      - run: uv lock --check
-      - run: uv sync
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run ty check
-      - run: uv run pytest
+          python-version: "3.11" # lowest from requires-python
 
-      # The distribution path — the same build+install `uv tool install "git+..."`
-      # performs on a user's machine. Catches packaging mistakes (missing
-      # package data, broken entry point) that `uv run` never notices.
-      - name: Install as a tool
-        shell: bash
+      # The gate's vulnerability audit runs osv-scanner when it's on PATH.
+      - name: Install osv-scanner
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          uv tool install .
-          echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
-      - run: wordstat --version
-      - run: wordstat --ai
-      - run: wordstat doctor
+          gh release download --repo google/osv-scanner --pattern osv-scanner_linux_amd64 --output "$RUNNER_TEMP/osv-scanner"
+          chmod +x "$RUNNER_TEMP/osv-scanner"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
-  audit:
-    # Known vulnerabilities in the locked dependency set (OSV-Scanner reads
-    # uv.lock natively). Dependabot opens the upgrade PRs; this is what
-    # fails the build until they're merged. Locally: `osv-scanner --lockfile=uv.lock`.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: google/osv-scanner-action/osv-scanner-action@v2.6.0
-        with:
-          scan-args: |-
-            --lockfile=uv.lock
+      # Everything: lock, lint, format, types, tests (incl. help snapshots and
+      # the auth status shape), changelog fragment, wheel build + install +
+      # `wordstat --version` / `--help`, osv-scanner over uv.lock.
+      - run: uv run scripts/release.py --check

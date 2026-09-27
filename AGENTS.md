@@ -7,20 +7,25 @@ that).
 ## Development
 
 ```bash
-uv sync                          # also writes uv.lock — commit it (CI runs `uv lock --check`)
+uv sync                          # also writes uv.lock — commit it
 uv run wordstat --help
-uv run ruff check . && uv run ruff format --check . && uv run ty check && uv run pytest
+uv run scripts/release.py --check   # the whole gate — run it before every commit
 ```
 
-Before calling anything done, that last line must pass — it's exactly
-what CI runs on Linux/macOS/Windows, followed by `uv tool install .` to
-prove the package still installs as a tool.
+**Before every commit, `uv run scripts/release.py --check` must pass.**
+It is the authoritative gate (CI, if the repo keeps it, runs exactly this,
+and every release runs it too): `uv lock --check`, ruff check + format,
+ty, pytest (coverage floor, help contract + snapshots, `auth status`
+shape), a changelog fragment for any change since the last tag, and a
+wheel build installed into a throwaway venv where `wordstat
+--version` must match the built version. A failure names the step and
+shows its output — fix the cause, never skip the step.
 
-Run `scripts/install_hooks.sh` once (`.git/hooks/` isn't versioned by git,
-so this is also needed again after a fresh clone). It installs a
-pre-commit hook that warns — never blocks — when a command's logic changed
-without its docstring changing too, since that docstring is the `--help`
-text agents read as this CLI's API contract.
+Run `scripts/install_hooks.sh` once per clone: it points git at the
+versioned hooks in `.githooks/` (Claude Code sessions do this themselves
+via `.claude/settings.json`). The pre-commit hook **blocks** a commit where
+a command's logic changed but its docstring didn't, and warns when `src/`
+changed with no changelog fragment on the branch.
 
 ## Architecture (do not violate)
 
@@ -38,6 +43,14 @@ text agents read as this CLI's API contract.
   (`--provider a,b`, project `providers = [...]`, default `["xmlriver"]`).
   Tests inject `httpx.MockTransport` via the provider's `transport`
   argument. Never call `httpx` from `core/` or `commands/`.
+  `WordstatProvider` subclasses the template's `providers.base.Provider`
+  (`abstract = True`), so `all_providers()` finds every provider and
+  `auth status` reports it. Each sets `required` (`xmlriver` yes, `xmlstock`
+  no) and implements `health_check()` through `balance_url` /
+  `_balance_params` / `_parse_balance`: the free balance request, one try,
+  10 s (`tests/test_providers.py` fails without it). `auth status --check
+  --json` runs those checks; its JSON shape is a cross-tool contract pinned
+  by `tests/test_auth.py` — changing it is a breaking change.
 - `credentials/` — secrets via OS keychain + env vars. Never write a secret
   to `.wordstat/config.toml` or any other project-local file.
 - `output/` — every command supports both human and `--json` output via
@@ -60,12 +73,15 @@ text agents read as this CLI's API contract.
 
 Python package `rb_wordstat` (distribution `rb-wordstat`), but everything a user
 sees is `wordstat`: the command, `WORDSTAT_<PROVIDER>_<FIELD>` env vars, keychain
-entries `wordstat:<provider>`, the `.wordstat/` project dir. Credentials are
-shared with the sibling `serp` CLI: `WordstatProvider.load_credential` falls
-back to its entries (`SERP_*`, keychain `serp:<provider>`) — the same XML
-River / XMLStock account serves both tools. That split lives in
-`core/version.py` (`CLI_NAME`, `DIST_NAME`) — use those, never
-`__name__.split(".")[0]`, for anything user-facing.
+entries `wordstat:<provider>`, the `.wordstat/` project dir (unlike the
+template, which prefixes them with the package name — kept so stored
+credentials survive). Credentials are shared with the sibling `serp` CLI:
+per field, `WORDSTAT_*` → keychain `wordstat:` → `SERP_*` → keychain `serp:` →
+legacy `XMLRIVER_*` (`credentials.manager.SHARED_NAMESPACES`, `locate_fields`;
+servers pass keys as `SERP_*`). Providers and `auth status` both resolve through
+`locate_fields`, so they always agree. Names: `core/version.py` `CLI_NAME`
+(prefix) and `cli_name()` (the command), `_distribution.DIST_NAME` — use
+those, never `__name__.split(".")[0]`, for anything user-facing.
 
 ## Library API
 
@@ -77,19 +93,49 @@ Logging is stdlib `logging` (logger `rb_wordstat`), never `print`.
 
 ## Releasing
 
-Never edit `version =` in `pyproject.toml` by hand. Add a line under
-`## [Unreleased]` in `CHANGELOG.md` with each change, and when it should
-ship run `uv run scripts/release.py patch|minor|major` from a clean
-`main` — it bumps the version, dates the changelog, commits, tags
-`v<version>` and pushes. Projects pin the CLI they need via
-`[cli] min_version` in their config, so a change a project depends on
-needs a release before that project can require it.
+- **Version = git tag.** There is no `version =` in `pyproject.toml`;
+  uv-dynamic-versioning reads the latest `vX.Y.Z` tag at build time. Don't
+  add one back, don't hard-code a version string anywhere.
+- **Changelog = fragments.** Don't edit `CHANGELOG.md`. Every user-visible
+  change adds one fragment:
+  `uv run towncrier create +<slug>.<type>.md -c "One or two sentences."`
+  (type: added/changed/deprecated/removed/fixed/security). CI fails a PR
+  without one.
+- **Release** from a clean, up-to-date `main`:
+  `uv run scripts/release.py patch|minor|major` — gate, towncrier build,
+  commit `Release vX.Y.Z`, annotated tag. It prints the push command;
+  pushing needs the user's confirmation.
+- **SemVer is a promise about the CLI surface.** Removing/renaming/changing
+  commands, flags, the `--json` shape, exit or error codes is breaking —
+  major, or **minor while at `0.x`**. A new feature with old behaviour
+  intact is minor (**patch while at `0.x`**); a fix is patch. Deprecate first
+  (warning + a `deprecated` fragment), remove in the next breaking release.
+- **Depending on another of our tools**: pin by tag in `[tool.uv.sources]`
+  (`{ git = "...", tag = "vX.Y.Z" }`) with a compatible range in
+  `dependencies` (`>=0.2,<0.3`) — never `branch = "main"`, never a
+  committed `path =`. Bump = new tag + `uv lock --upgrade-package <name>`
+  + full gate, one commit.
+
+Projects pin the CLI they need via `[cli] min_version` in their config, so
+a change a project depends on needs a release before that project can
+require it.
 
 ## After changing the command surface
 
-Nothing to update by hand: agents discover commands from a bare
-`wordstat` / `--help`, which is rendered from the command
-docstrings — so the docstring *is* the API doc, keep it accurate (the
-pre-commit hook warns when it drifts). `src/rb_wordstat/data/SKILL.md`
+Agents discover commands from a bare `wordstat` / `--help`,
+rendered from the command docstrings and `help=` strings — so the
+docstring *is* the API doc. **Changed a command's behaviour → update its
+docstring in the same commit**:
+
+- docstring = one-line summary, optional paragraph, and an
+  `Example: {cli} <command> ...` line (`output.guard` turns `{cli}` into
+  `wordstat`); every `typer.Option`/`Argument` has `help=`;
+- then `uv run pytest --snapshot-update` and read the diff in
+  `tests/snapshots/help/` — that diff is the user-visible change.
+
+Enforced: Claude Code hooks (`.claude/settings.json`: PostToolUse after
+editing a command file, Stop before ending the turn), the pre-commit hook,
+and `tests/test_help.py` in the gate. If a hook fires on a refactor that
+truly doesn't change behaviour, say so — don't bypass it silently. `src/rb_wordstat/data/SKILL.md`
 deliberately lists no commands, only conventions; touch it only if a
 convention changes (a new exit code, a new credential rule).

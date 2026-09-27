@@ -1,12 +1,14 @@
 # Changelog
 
-All notable changes to this project are documented here. The format is
-[Keep a Changelog](https://keepachangelog.com/), versions follow
-[SemVer](https://semver.org/). `scripts/release.py` moves the Unreleased
-section under a new version heading — add entries here as you go, don't
-write them at release time.
+All notable changes to this project are documented here. Versions follow
+[SemVer](https://semver.org/) (while at `0.x`, a minor bump may break).
 
-## [Unreleased]
+Don't edit this file between releases: each change adds a fragment to
+`changelog.d/` (`uv run towncrier create +<slug>.<type>.md -c "..."`, type
+one of added/changed/deprecated/removed/fixed/security), and
+`scripts/release.py` assembles them into a new section below the marker.
+
+<!-- towncrier release notes start -->
 
 ## [0.2.0] - 2026-09-24
 

@@ -17,7 +17,10 @@ def init(
     quiet: bool = output.QuietOption,
     verbose: bool = output.VerboseOption,
 ) -> None:
-    """Создать проект в папке: .wordstat/config.toml с очередью провайдеров и min_version."""
+    """Создать проект в папке: .wordstat/config.toml с очередью провайдеров и min_version.
+
+    Example: {cli} init --non-interactive
+    """
     target = Path(ctx.obj.get("project") or Path.cwd()).resolve()
 
     if not force and services.find_project_root(target) == target:

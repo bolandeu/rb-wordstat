@@ -1,6 +1,7 @@
 [project]
 name = "rb-wordstat"
-version = "0.2.0"
+# Version comes from the git tag vX.Y.Z (uv-dynamic-versioning) — never add `version =`.
+dynamic = ["version"]
 description = "Частоты Яндекс.Wordstat через провайдеров (XML River, XMLStock) с фолбэком: CLI wordstat и библиотека rb_wordstat"
 readme = "README.md"
 authors = [{ name = "bolandeu" }]
@@ -23,8 +24,20 @@ wordstat = "rb_wordstat.cli:main"
 Repository = "https://github.com/bolandeu/wordstat"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
+vcs = "git"
+style = "pep440"
+fallback-version = "0.0.0"
+
+[tool.uv]
+# Rebuild the editable install when a commit or tag moves, so `--version` follows the tag.
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rb_wordstat"]
@@ -35,12 +48,62 @@ dev = [
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0",
     "ruff>=0.6",
+    "syrupy>=4.8",
+    "towncrier>=24.8",
     "ty>=0.0.80",
 ]
+
+# Changelog from fragments: each change adds changelog.d/+<slug>.<type>.md
+# (`uv run towncrier create +<slug>.<type>.md -c "..."`); scripts/release.py assembles them.
+[tool.towncrier]
+filename = "CHANGELOG.md"
+directory = "changelog.d"
+start_string = "<!-- towncrier release notes start -->\n"
+title_format = "## [{version}] - {project_date}"
+issue_format = "#{issue}"
+
+[[tool.towncrier.type]]
+directory = "added"
+name = "Added"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "changed"
+name = "Changed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "deprecated"
+name = "Deprecated"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "removed"
+name = "Removed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "fixed"
+name = "Fixed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "security"
+name = "Security"
+showcontent = true
+
+[tool.cli-generator]
+# Where scripts/check_command_docstrings.py (git pre-commit + Claude Code hooks)
+# looks for commands: a glob or a list of globs, relative to the repo root.
+commands = ["src/rb_wordstat/commands/*.py"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 addopts = "--cov --cov-report=term-missing:skip-covered"
+# tests/test_help.py keeps help snapshots at tests/snapshots/help/<command>.txt
+# (standard §7), not in syrupy's own `__snapshots__/<test file>/` layout, so
+# syrupy warns it "can not relate" each file to its test. It can — by name.
+filterwarnings = ["ignore:(?s).*Can not relate snapshot:UserWarning"]
 
 [tool.coverage.run]
 source = ["src"]

@@ -43,3 +43,6 @@ def test_check_cli_compat(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(services, "installed_version", lambda: None)  # bare source run: nothing to compare
     services.check_cli_compat(config)
+
+    monkeypatch.setattr(services, "installed_version", lambda: "0.0.0.post3.dev0+g1a2b3c4")  # no tag yet: dev build
+    services.check_cli_compat(config)

@@ -3,12 +3,16 @@
 Новый провайдер: подкласс `WordstatProvider` в своём модуле + строка в
 `PROVIDERS`. Дальше он доступен по имени в `wordstat search --provider`,
 `wordstat auth login --provider` и в `providers` конфига проекта.
+
+Каждый провайдер реализует `health_check()` — то, что делает
+`wordstat auth status --check` (см. `base.Provider`); `all_providers()`
+находит их сам, `tests/test_providers.py` падает без него.
 """
 
 from __future__ import annotations
 
 from ..core.errors import InvalidArguments
-from .base import WordstatProvider
+from .base import Health, Provider, Quota, WordstatProvider, all_providers
 from .xmlriver import XmlRiverProvider
 from .xmlstock import XmlStockProvider
 
@@ -30,4 +34,15 @@ def provider_class(name: str) -> type[WordstatProvider]:
         raise InvalidArguments(f"Неизвестный провайдер '{name}'. Доступны: {', '.join(PROVIDERS)}.") from None
 
 
-__all__ = ["PROVIDERS", "WordstatProvider", "XmlRiverProvider", "XmlStockProvider", "provider_class", "providers_help"]
+__all__ = [
+    "PROVIDERS",
+    "Health",
+    "Provider",
+    "Quota",
+    "WordstatProvider",
+    "XmlRiverProvider",
+    "XmlStockProvider",
+    "all_providers",
+    "provider_class",
+    "providers_help",
+]

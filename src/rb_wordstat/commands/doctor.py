@@ -9,7 +9,7 @@ from ..core import services
 from ..core.cache import ResponseCache
 from ..core.errors import CliTooOld, InvalidArguments
 from ..core.models import DEFAULT_PROVIDERS, ProjectConfig
-from ..core.version import CLI_NAME, DEV_VERSION, installed_version
+from ..core.version import DEV_VERSION, cli_name, installed_version
 from ..credentials import manager as credentials
 from ..providers import provider_class
 
@@ -33,7 +33,7 @@ def _auth_checks(providers: list[str]) -> list[dict]:
             {
                 "name": f"credential:{provider}",
                 "ok": available,
-                "detail": None if available else f"run '{CLI_NAME} auth login --provider {provider}'",
+                "detail": None if available else f"run '{cli_name()} auth login --provider {provider}'",
             }
         )
     return checks
@@ -49,7 +49,10 @@ def doctor(
     """Диагностика: версия, проект, настройки, журнал, связка ключей, доступы провайдеров.
 
     Всегда завершается с кодом 0 — результат это сам отчёт; `healthy`
-    говорит, прошли ли все проверки.
+    говорит, прошли ли все проверки. Доступы здесь — только наличие; работают
+    ли они — `auth status --check`.
+
+    Example: {cli} doctor --json
     """
     checks: list[dict] = [{"name": "python", "ok": True}]
     checks.append({"name": "cli_version", "ok": True, "detail": installed_version() or DEV_VERSION})

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import re
+from typing import ClassVar
+
+from ..core.errors import AuthRequired, ProviderError
 from .base import ApiError, WordstatProvider, to_int
 
 # Коды ошибок: https://xmlriver.com/api/api-errors/ (те же, что у выдачи в serp).
@@ -18,7 +22,22 @@ class XmlRiverProvider(WordstatProvider):
     name = "xmlriver"
     summary = "XML River"
     url = "https://xmlriver.com/wordstat/new/json"
-    legacy_env = {"user": "XMLRIVER_USER", "token": "XMLRIVER_TOKEN"}  # noqa: RUF012 — ClassVar в базе
+    balance_url = "https://xmlriver.com/api/get_balance/"
+    legacy_env: ClassVar[dict[str, str]] = {"user": "XMLRIVER_USER", "token": "XMLRIVER_TOKEN"}
+
+    def _balance_params(self) -> dict:
+        return {"user": self._credential["user"], "key": self._credential["token"]}
+
+    def _parse_balance(self, text: str) -> float:
+        # Баланс — число в теле ответа; ошибка — как у выдачи, <error code="N">…</error>.
+        try:
+            return float(text.strip())
+        except ValueError:
+            pass
+        match = re.search(r'code="?(\d+)', text)
+        if match and int(match.group(1)) in _AUTH_ERRORS:
+            raise AuthRequired(self.name)
+        raise ProviderError(self.name, f"баланс: неожиданный ответ ({text.strip()[:100]!r})")
 
     def _params(self, query_sent: str, lr: int) -> dict:
         return {"user": self._credential["user"], "key": self._credential["token"], "query": query_sent, "regions": lr}

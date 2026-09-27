@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import gc
+
 import httpx
 import pytest
 
 from rb_wordstat.core.errors import AuthRequired, ProviderError
 from rb_wordstat.core.models import FreqType
-from rb_wordstat.providers import XmlRiverProvider, XmlStockProvider, provider_class
+from rb_wordstat.providers import Health, Provider, XmlRiverProvider, XmlStockProvider, all_providers, provider_class
 from rb_wordstat.providers.base import WordstatProvider
 
 from .conftest import fixture_json
@@ -131,3 +133,123 @@ def test_credentials_own_then_shared_with_serp_then_legacy(monkeypatch: pytest.M
 def test_unknown_provider_name() -> None:
     with pytest.raises(Exception, match="Неизвестный провайдер"):
         provider_class("nope")
+
+
+def test_required_xmlriver_optional_xmlstock() -> None:
+    assert (XmlRiverProvider.required, XmlStockProvider.required) == (True, False)
+
+
+# --- health_check: баланс счёта, один запрос без повторов ---------------------------
+
+
+def checked(cls: type[WordstatProvider], respond) -> tuple[Health, list[httpx.Request]]:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return respond(request)
+
+    provider = cls(CRED)
+    provider.health_transport = httpx.MockTransport(handler)
+    return provider.health_check(), seen
+
+
+@pytest.mark.parametrize(
+    ("cls", "body", "url"),
+    [
+        (XmlRiverProvider, "1840.5", "https://xmlriver.com/api/get_balance/?user=u&key=t"),
+        (XmlStockProvider, '{"balance": 1840.5}', "https://xmlstock.com/api/?do=balance&user=u&key=t"),
+    ],
+)
+def test_health_check_reads_balance(cls, body, url) -> None:
+    health, seen = checked(cls, lambda request: httpx.Response(200, text=body))
+    assert health.status == "ok"
+    assert health.quota is not None
+    assert (health.quota.remaining, health.quota.unit) == (1840, "rub")
+    assert [str(r.url) for r in seen] == [url]
+
+
+@pytest.mark.parametrize("cls", [XmlRiverProvider, XmlStockProvider])
+def test_health_check_zero_balance_is_quota_exhausted(cls) -> None:
+    body = "0" if cls is XmlRiverProvider else '{"balance": 0}'
+    health, _ = checked(cls, lambda request: httpx.Response(200, text=body))
+    assert health.status == "quota_exhausted"
+
+
+@pytest.mark.parametrize(
+    ("cls", "body"),
+    [
+        (XmlRiverProvider, '<response><error code="42">ключ содержит ошибку</error></response>'),
+        (XmlStockProvider, "ERROR_KEY"),
+    ],
+)
+def test_health_check_bad_credential_is_auth_required(cls, body) -> None:
+    with pytest.raises(AuthRequired):
+        checked(cls, lambda request: httpx.Response(200, text=body))
+    with pytest.raises(AuthRequired):
+        checked(cls, lambda request: httpx.Response(401))
+
+
+@pytest.mark.parametrize("cls", [XmlRiverProvider, XmlStockProvider])
+def test_health_check_failures_are_provider_errors_without_retry(cls) -> None:
+    with pytest.raises(ProviderError, match="неожиданный ответ"):
+        checked(cls, lambda request: httpx.Response(200, text="<html>"))
+    with pytest.raises(ProviderError, match="HTTP 503"):
+        checked(cls, lambda request: httpx.Response(503))
+
+    calls: list[int] = []
+
+    def slow(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        raise httpx.ReadTimeout("slow", request=request)
+
+    with pytest.raises(ProviderError, match="ReadTimeout"):
+        checked(cls, slow)
+    assert calls == [1]
+
+
+# --- provider contract: every provider can prove its credential works -------------
+
+
+@pytest.mark.parametrize("provider_cls", all_providers(), ids=lambda cls: cls.name)
+def test_every_provider_implements_health_check(provider_cls: type[Provider]) -> None:
+    # Only the override is checked: constructing a provider may need config or
+    # env, which is `for_health_check()`'s job, not this test's.
+    assert provider_cls.health_check is not Provider.health_check, (
+        f"{provider_cls.__name__} must implement health_check() — `auth status --check` calls it"
+    )
+
+
+def test_every_registered_provider_is_discovered() -> None:
+    assert {cls.name for cls in all_providers()} == {"xmlriver", "xmlstock"}
+
+
+def test_all_providers_discovers_package_classes_only() -> None:
+    # Subclasses stay registered on Provider while they're referenced, so this
+    # test drops them (and collects) at the end — later tests see the real set.
+    def make_classes() -> tuple[type, type, type]:
+        class Found(Provider):
+            __module__ = "rb_wordstat.providers.fake"
+            name = "found"
+
+            def health_check(self) -> Health:
+                return Health()
+
+        class Base(Provider):
+            __module__ = "rb_wordstat.providers.fake"
+            abstract = True
+
+        class Elsewhere(Provider):  # defined outside providers/: not discovered
+            name = "elsewhere"
+
+        return Found, Base, Elsewhere
+
+    before = set(all_providers())
+    found, base, elsewhere = make_classes()
+    discovered = all_providers()
+    assert found in discovered
+    assert base not in discovered
+    assert elsewhere not in discovered
+    del found, base, elsewhere, discovered
+    gc.collect()
+    assert set(all_providers()) == before

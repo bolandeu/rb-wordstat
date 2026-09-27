@@ -46,10 +46,12 @@ def check_cli_compat(config: ProjectConfig) -> None:
 
     A project outlives any single CLI release; this is how it refuses to be
     driven by a CLI that predates a config field or command it relies on.
-    Skipped for an uninstalled (bare source) run, which has no version.
+    Skipped for an uninstalled (bare source) run, which has no version, and
+    for a build without a `v*` tag in reach (uv-dynamic-versioning's
+    `0.0.0` fallback) — a dev checkout, not a release older than anything.
     """
     installed = installed_version()
-    if installed is None:
+    if installed is None or Version(installed).release == (0, 0, 0):
         return
     if Version(installed) < Version(config.cli.min_version):
         raise CliTooOld(installed, config.cli.min_version)

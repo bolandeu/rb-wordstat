@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -8,8 +9,10 @@ import typer
 from typer.testing import CliRunner
 
 from rb_wordstat import output
+from rb_wordstat._distribution import DIST_NAME
 from rb_wordstat.cli import app
 from rb_wordstat.core import services
+from rb_wordstat.core.errors import InvalidArguments
 
 runner = CliRunner()
 
@@ -27,6 +30,15 @@ def invoke_json(*args: str, **kwargs) -> tuple[int, dict]:
 
 def init(tmp_path: Path, name: str = "demo") -> None:
     assert invoke("--project", str(tmp_path), "init", "--name", name).exit_code == 0
+
+
+# --- names ----------------------------------------------------------------------
+
+
+def test_distribution_name_matches_pyproject() -> None:
+    """_distribution.DIST_NAME is how importlib.metadata finds this package; it must equal [project] name."""
+    pyproject = tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text())
+    assert pyproject["project"]["name"] == DIST_NAME
 
 
 # --- help-on-no-args -------------------------------------------------------
@@ -118,6 +130,8 @@ def test_config_set_unknown_key_fails_without_persisting(tmp_path: Path) -> None
 
 
 def test_min_version_gate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Pin the installed version: an untagged checkout builds as 0.0.0, which the gate skips.
+    monkeypatch.setattr(services, "installed_version", lambda: "1.0.0")
     init(tmp_path)
     assert invoke("--project", str(tmp_path), "config", "set", "cli.min_version", "99.0.0").exit_code == 0
 
@@ -153,7 +167,8 @@ def test_doctor_reports_config_parse_error(tmp_path: Path) -> None:
     assert config_check["detail"]
 
 
-def test_doctor_reports_incompatible_cli_instead_of_failing(tmp_path: Path) -> None:
+def test_doctor_reports_incompatible_cli_instead_of_failing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(services, "installed_version", lambda: "1.0.0")
     init(tmp_path)
     invoke("--project", str(tmp_path), "config", "set", "cli.min_version", "99.0.0")
 
@@ -185,6 +200,27 @@ def _app_with(command):
 
     test_app.command("cmd")(output.guard(command))
     return test_app
+
+
+def test_report_with_a_problem_keeps_the_payload() -> None:
+    """output.emit_report: data plus ok=false + error, exit code from the problem (auth status uses it)."""
+
+    def report(ctx: typer.Context) -> None:
+        render = lambda d: output.human.echo(f"items: {d['items']}")  # noqa: E731
+        output.emit_report(ctx, {"items": [1]}, render, InvalidArguments("bad"))
+
+    result = runner.invoke(_app_with(report), ["--json", "cmd"])
+    payload = json.loads(result.stdout)
+    assert (result.exit_code, payload["ok"], payload["items"], payload["error"]["code"]) == (
+        2,
+        False,
+        [1],
+        "INVALID_ARGUMENTS",
+    )
+    result = runner.invoke(_app_with(report), ["cmd"])
+    assert result.exit_code == 2
+    assert "items: [1]" in result.stdout
+    assert "bad" in result.stderr
 
 
 def test_unexpected_exception_still_yields_json_envelope() -> None:
@@ -257,7 +293,7 @@ def test_skill_install_writes_to_project_dir(tmp_path: Path, monkeypatch: pytest
     assert code == 0
     installed = tmp_path / ".claude" / "skills" / "wordstat" / "SKILL.md"
     assert installed.is_file()
-    assert "wordstat" in installed.read_text(encoding="utf-8")
+    assert "name: wordstat" in installed.read_text(encoding="utf-8")
     assert payload["path"] == str(installed)
 
 

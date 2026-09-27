@@ -15,7 +15,10 @@ def status(
     quiet: bool = output.QuietOption,
     verbose: bool = output.VerboseOption,
 ) -> None:
-    """Показать проект: имя, путь, очередь провайдеров."""
+    """Показать проект: имя, путь, очередь провайдеров.
+
+    Example: {cli} status --json
+    """
     start = Path(ctx.obj.get("project") or Path.cwd())
     root = services.require_project_root(start)
     output.vecho(ctx, f"Resolved project root: {root}")

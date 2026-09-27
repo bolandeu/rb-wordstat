@@ -1,0 +1,26 @@
+
+ Usage: wordstat auth status [OPTIONS]
+
+ Report every provider's credential: where it comes from and whether it works. Never prints values.
+
+ Without --check only presence is reported (status `unchecked` or `missing`).
+ Exits 0 when every required provider is ok/unchecked (an optional one may be
+ missing), 3 when any required provider has a problem or any credential is
+ invalid/expired, 2 on a usage error. A per-target provider (one credential per
+ site/host/account) gets one entry per stored target, named `<kind>:<target>`. The --json shape is
+ a cross-tool contract:
+ `tool`, `version`, `checked_at`, `credentials[]` with `provider`, `required`,
+ `fields`, `source`, `source_ref`, `status`, `expires_at`, `quota`, `message`.
+
+ Example: wordstat auth status --check --json
+
+╭─ Параметры ──────────────────────────────────────────────────────────────────────────────────────╮
+│ --check                  Also make one cheap read-only call per provider (10 s timeout) to prove │
+│                          each works.                                                             │
+│ --provider        <str>  Report only this provider, or one target as <kind>:<target> (default:   │
+│                          all).                                                                   │
+│ --json                   Машиночитаемый вывод: JSON в stdout.                                    │
+│ --quiet                  Не печатать ничего, кроме данных.                                       │
+│ --help                   Show this message and exit.                                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

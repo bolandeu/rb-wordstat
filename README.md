@@ -36,7 +36,7 @@ uv tool install "git+ssh://git@github.com/bolandeu/wordstat.git"
 3. только XML River: старые `XMLRIVER_USER` / `XMLRIVER_TOKEN`.
 
 ```bash
-wordstat auth status --provider xmlstock   # найдены ли доступы
+wordstat auth status --check              # откуда ключи, работают ли, остаток баланса
 wordstat auth login --provider xmlriver    # свои, если нужны отдельно от serp
 wordstat doctor                            # общая диагностика
 ```
@@ -193,10 +193,12 @@ for r in results:
 ```bash
 uv sync
 uv run wordstat --help
-uv run ruff check . && uv run ruff format --check . && uv run ty check && uv run pytest
-scripts/install_hooks.sh      # pre-commit: предупреждает об устаревших docstring команд
+uv run scripts/release.py --check   # весь гейт: lock, ruff, ty, pytest, фрагмент, сборка, аудит
+scripts/install_hooks.sh      # pre-commit: блокирует устаревшие docstring команд
 uv tool install --editable .  # глобальная команда из рабочей копии
 ```
 
-Релиз: `uv run scripts/release.py patch|minor|major` — поднимает версию, датирует
-`CHANGELOG.md`, коммитит, ставит тег и пушит. Версию руками не править.
+Версия — из git-тега `vX.Y.Z`, в `pyproject.toml` её нет. `CHANGELOG.md` руками не
+править: каждое изменение — фрагмент `uv run towncrier create +<slug>.<type>.md -c "…"`.
+Релиз: `uv run scripts/release.py patch|minor|major` с чистого `main` — гейт, сборка
+changelog, коммит `Release vX.Y.Z`, тег; команду push печатает, но не выполняет.

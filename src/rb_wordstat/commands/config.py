@@ -19,7 +19,10 @@ def list_config(
     json_output: bool = output.JsonOption,
     quiet: bool = output.QuietOption,
 ) -> None:
-    """Показать все настройки проекта."""
+    """Показать все настройки проекта.
+
+    Example: {cli} config list --json
+    """
     start = Path(ctx.obj.get("project") or Path.cwd())
     root = services.require_project_root(start)
     config = services.load_config(root)
@@ -35,7 +38,10 @@ def get_config(
     json_output: bool = output.JsonOption,
     quiet: bool = output.QuietOption,
 ) -> None:
-    """Показать одну настройку."""
+    """Показать одну настройку.
+
+    Example: {cli} config get providers
+    """
     start = Path(ctx.obj.get("project") or Path.cwd())
     root = services.require_project_root(start)
     value: object = services.load_config(root).model_dump()
@@ -57,7 +63,10 @@ def set_config(
     json_output: bool = output.JsonOption,
     quiet: bool = output.QuietOption,
 ) -> None:
-    """Изменить одну настройку (не секрет — ключи только через auth login)."""
+    """Изменить одну настройку (не секрет — ключи только через auth login).
+
+    Example: {cli} config set providers xmlriver,xmlstock
+    """
     start = Path(ctx.obj.get("project") or Path.cwd())
     root = services.require_project_root(start)
     data = services.load_config(root).model_dump()

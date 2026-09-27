@@ -30,6 +30,12 @@ class FakeProvider(WordstatProvider):
     def _params(self, query_sent: str, lr: int) -> dict:
         return {}
 
+    def _balance_params(self) -> dict:
+        return {}
+
+    def _parse_balance(self, text: str) -> float:
+        return 1.0
+
     @classmethod
     def _api_error(cls, data: dict):
         return None

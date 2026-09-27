@@ -8,6 +8,7 @@ from collections.abc import Callable
 import typer
 
 from ..core.errors import Aborted, CliError, InvalidArguments
+from ..core.version import cli_name
 from . import human
 from . import json as json_output
 
@@ -20,6 +21,7 @@ __all__ = [
     "VerboseOption",
     "configure_logging",
     "emit_error",
+    "emit_report",
     "emit_success",
     "group",
     "guard",
@@ -29,6 +31,8 @@ __all__ = [
     "require_confirmation",
     "vecho",
 ]
+
+_CLI_NAME = cli_name()
 
 # Reusable local options: attach to any command so `<cli> <command> --json`
 # works, on top of the global `<cli> --json <command>` handled by guard().
@@ -92,6 +96,29 @@ def emit_success(ctx: typer.Context, payload: dict, render_human: Callable[[dict
         json_output.emit({"ok": True, **payload})
     elif not ctx.obj.get("quiet"):
         render_human(payload)
+
+
+def emit_report(
+    ctx: typer.Context, payload: dict, render_human: Callable[[dict], None], problem: CliError | None
+) -> None:
+    """Emit a report that is data whether or not it found a problem (e.g. `auth status`).
+
+    No problem: exactly `emit_success`. A problem: the full payload is still
+    emitted, plus `ok: false` and the problem as the standard `error` object,
+    and the process exits with the problem's exit code.
+    """
+    if problem is None:
+        emit_success(ctx, payload, render_human)
+        return
+    if ctx.obj.get("json"):
+        json_output.emit({"ok": False, "error": problem.to_dict(), **payload})
+    else:
+        if not ctx.obj.get("quiet"):
+            render_human(payload)
+        human.err_console.print(f"[red]Error:[/red] {problem.message}")
+        if problem.action:
+            human.err_console.print(f"[dim]{problem.action}[/dim]")
+    raise typer.Exit(code=problem.exit_code)
 
 
 def emit_error(ctx: typer.Context, error: CliError) -> None:
@@ -181,4 +208,7 @@ def guard(func: Callable) -> Callable:
                 ),
             )
 
+    # Docstrings are the --help text; `{cli}` in their `Example:` lines becomes
+    # this CLI's name, so template-born commands need no Jinja rendering.
+    wrapper.__doc__ = (func.__doc__ or "").replace("{cli}", _CLI_NAME) or None
     return wrapper

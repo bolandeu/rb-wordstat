@@ -57,7 +57,9 @@ uv tool install "git+ssh://git@github.com/bolandeu/wordstat.git"
 - **Доступы** общие с CLI `serp`: keychain / env `WORDSTAT_<PROVIDER>_<FIELD>`,
   иначе записи serp (`SERP_<PROVIDER>_<FIELD>`, keychain `serp:<provider>`),
   никогда не в аргументах или настройках. Проверка —
-  `wordstat auth status --provider <имя> --json`, вход — `wordstat auth login`
+  `wordstat auth status --check --json`: по каждому провайдеру источник,
+  статус, срок и остаток — без значений; код 3, если обязательный xmlriver не
+  в порядке. Вход — `wordstat auth login`
   (или `serp auth login`). Никогда не просить пользователя вставить секрет в
   командную строку.
 - **Необратимые команды** — те, у которых в `--help` есть `--dry-run` и
