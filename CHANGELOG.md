@@ -10,6 +10,13 @@ one of added/changed/deprecated/removed/fixed/security), and
 
 <!-- towncrier release notes start -->
 
+## [0.3.0] - 2026-09-27
+
+### Changed
+
+- Шаблон cli-generator v1.2.3 и стандарт релизов: версия берётся из git-тега, changelog собирается из фрагментов changelog.d/, справка команд проверяется снапшотами. **Несовместимо:** `wordstat auth status` теперь отдаёт отчёт по стандарту §8 (`tool`, `version`, `checked_at`, `credentials[]` с `provider`, `required`, `source`, `source_ref`, `status`, `quota`…) по всем провайдерам сразу вместо `{"provider", "authenticated"}`; код выхода 3, если обязательный xmlriver не в порядке (xmlstock — необязательный). Новый флаг `--check` проверяет ключи бесплатным запросом баланса и показывает остаток в рублях. Порядок поиска ключей прежний: `WORDSTAT_*` → keychain `wordstat:` → `SERP_*` → keychain `serp:` → `XMLRIVER_USER`/`XMLRIVER_TOKEN`.
+
+
 ## [0.2.0] - 2026-09-24
 
 ### Changed
