@@ -10,6 +10,13 @@ one of added/changed/deprecated/removed/fixed/security), and
 
 <!-- towncrier release notes start -->
 
+## [0.3.1] - 2026-09-28
+
+### Changed
+
+- Шаблон cli-generator v1.2.8: общие с serp доступы и порядок источников — средствами шаблона (`shared_namespaces`). Порядок по полю теперь: env `WORDSTAT_*` → env `SERP_*` → keychain `wordstat:` → keychain `serp:` → старые `XMLRIVER_*`; пустая env-переменная считается заданной.
+
+
 ## [0.3.0] - 2026-09-27
 
 ### Changed
