@@ -96,6 +96,10 @@ showcontent = true
 # Where scripts/check_command_docstrings.py (git pre-commit + Claude Code hooks)
 # looks for commands: a glob or a list of globs, relative to the repo root.
 commands = ["src/rb_wordstat/commands/*.py"]
+# scripts/release.py: extras to install before ruff/ty/pytest in the gate, and
+# the release commit message (e.g. for Conventional Commits hooks).
+# gate_extras = ["browser"]
+# release_commit = "chore(release): v{version}"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -113,6 +117,12 @@ source = ["src"]
 # new commands land untested. Raise it, never lower it.
 fail_under = 90
 show_missing = true
+
+[tool.ty.terminal]
+# Only errors fail the gate; recent ty (>= 0.0.84) otherwise exits 1 on warnings too.
+# Legacy code that can't be fixed yet: downgrade specific rules instead of
+# ignoring them, e.g. [tool.ty.rules] possibly-unbound-attribute = "warn".
+error-on-warning = false
 
 [tool.ruff]
 line-length = 120

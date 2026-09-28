@@ -28,6 +28,7 @@ from syrupy.extensions.single_file import SingleFileSnapshotExtension, WriteMode
 from typer.models import ParameterInfo
 from typer.testing import CliRunner
 
+from rb_wordstat import output
 from rb_wordstat.cli import app
 
 CLI = "wordstat"
@@ -104,6 +105,12 @@ def test_command_docstring_has_summary_and_example(path: tuple[str, ...]) -> Non
     assert any(invocation in line for line in examples), (
         f"`{_slug(path)}` docstring needs an `Example: {{cli}} {' '.join(path)} ...` line"
     )
+
+
+@pytest.mark.parametrize("path", sorted(COMMANDS), ids=_slug)
+def test_every_command_is_guarded(path: tuple[str, ...]) -> None:
+    # output.guard gives the JSON error envelope, local --json/--quiet and the {cli} substitution in help.
+    assert output.is_guarded(COMMANDS[path]), f"`{_slug(path)}` must be wrapped in @output.guard"
 
 
 @pytest.mark.parametrize("path", sorted(COMMANDS), ids=_slug)

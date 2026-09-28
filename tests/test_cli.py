@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import tomllib
 from pathlib import Path
 
@@ -33,6 +34,28 @@ def init(tmp_path: Path, name: str = "demo") -> None:
 
 
 # --- names ----------------------------------------------------------------------
+
+
+def test_distribution_name_is_declared_once() -> None:
+    """Only _distribution.py assigns DIST_NAME; a merge that re-declares it elsewhere would silently win."""
+    src = Path(__file__).resolve().parents[1] / "src" / "rb_wordstat"
+    declaring = sorted(
+        str(path.relative_to(src))
+        for path in src.rglob("*.py")
+        if re.search(r"^DIST_NAME\s*[:=]", path.read_text(), re.M)
+    )
+    assert declaring == ["_distribution.py"]
+
+
+def test_version_falls_back_to_legacy_distribution_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    from rb_wordstat.core import version
+
+    installed = version.installed_version()
+    monkeypatch.setattr(version, "DIST_NAME", "no-such-distribution-xyz")
+    monkeypatch.setattr(version, "DIST_NAME_LEGACY", DIST_NAME)  # an install made under the old name
+    assert version.installed_version() == installed
+    monkeypatch.setattr(version, "DIST_NAME_LEGACY", None)
+    assert version.installed_version() is None
 
 
 def test_distribution_name_matches_pyproject() -> None:

@@ -1,21 +1,20 @@
 from __future__ import annotations
 
 import importlib
-import importlib.util
 from datetime import UTC, datetime
 
 import typer
 
 from .. import output
 from ..core.errors import InvalidArguments
-from ..core.version import DEV_VERSION, cli_name, installed_version
+from ..core.version import DEV_VERSION, cli_name, installed_version, module_exists
 
 # `auth status` exists in every CLI (tools/docs/standard-release.md §8); a CLI
 # generated without credentials (no credentials/ package, no commands/login.py)
 # reports an empty `credentials` list and exits 0. Detected at runtime so this
 # file needs no template logic — same approach as doctor.py.
 _PACKAGE_NAME = __name__.split(".")[0]
-_HAS_CREDENTIALS = importlib.util.find_spec(f"{_PACKAGE_NAME}.credentials") is not None
+_HAS_CREDENTIALS = module_exists(f"{_PACKAGE_NAME}.credentials.manager")
 
 app = output.group("Доступы к провайдерам: проверка и хранение в связке ключей ОС.")
 
@@ -58,7 +57,7 @@ def auth_status(
     output.emit_report(ctx, payload, health.render, problem)
 
 
-if importlib.util.find_spec(f"{_PACKAGE_NAME}.commands.login") is not None:
+if module_exists(f"{_PACKAGE_NAME}.commands.login"):
     _login = importlib.import_module(f"{_PACKAGE_NAME}.commands.login")
     app.command("login")(_login.login)
     app.command("logout")(_login.logout)

@@ -10,15 +10,16 @@ import keyring.errors
 from keyring.backends import fail
 
 from ..core.errors import CredentialStoreUnavailable
-from ..core.version import CLI_NAME
+from ..core.version import cli_name
 
-# Префикс — wordstat, а не имя пакета rb_wordstat: keychain wordstat:*, env WORDSTAT_*.
-_PACKAGE_NAME = CLI_NAME
-# Доступы XML River / XMLStock общие с CLI serp: поле, которого нет у wordstat,
-# берётся из записей serp (env SERP_<PROVIDER>_<FIELD>, keychain serp:<provider>).
-# Порядок по каждому полю: WORDSTAT_* → keychain wordstat: → SERP_* → keychain serp: → legacy env.
-SHARED_NAMESPACES = ("serp",)
 log = logging.getLogger(__name__)
+
+# Everything this CLI stores or reads lives under its namespace — the command
+# name (`cli_name`), not the Python package: keychain service
+# "<namespace>:<provider>", env vars <NAMESPACE>_<PROVIDER>_<FIELD> (`serp` ->
+# SERP_XMLRIVER_API_KEY even though the package is rb_serp). Another tool's
+# namespace can be read too (`Provider.shared_namespaces`), never written.
+NAMESPACE = cli_name()
 
 # A "credential" is a small dict of named fields stored as one JSON blob per
 # provider in the OS keychain. `provider` is whatever identifies the
@@ -29,13 +30,14 @@ log = logging.getLogger(__name__)
 # (username + password) — nothing is special-cased for either shape.
 
 
-def _service_name(provider: str, namespace: str = _PACKAGE_NAME) -> str:
+def _service_name(provider: str, namespace: str = NAMESPACE) -> str:
     return f"{namespace}:{provider}"
 
 
-def _env_var_name(provider: str, field: str, namespace: str = _PACKAGE_NAME) -> str:
+def _env_var_name(provider: str, field: str, namespace: str = NAMESPACE) -> str:
     # Anything that isn't a letter or digit becomes "_", so per-target names
-    # ("deploy:example.com") still give a settable name: MYCLI_DEPLOY_EXAMPLE_COM_API_KEY.
+    # ("deploy:example.com") and dashed commands still give a settable name:
+    # SITEMAP_XML_DEPLOY_EXAMPLE_COM_API_KEY.
     return re.sub(r"[^A-Z0-9]", "_", f"{namespace}_{provider}_{field}".upper())
 
 
@@ -48,7 +50,7 @@ _INDEX_USER = "__stored_credentials__"
 def stored_names() -> list[str]:
     """Names of credentials stored in the keychain by this CLI (env-only ones aren't listed)."""
     try:
-        raw = keyring.get_password(_PACKAGE_NAME, _INDEX_USER)
+        raw = keyring.get_password(NAMESPACE, _INDEX_USER)
     except keyring.errors.KeyringError:
         return []
     return sorted(json.loads(raw)) if raw else []
@@ -58,7 +60,7 @@ def _update_index(provider: str, *, present: bool) -> None:
     names = set(stored_names())
     names = names | {provider} if present else names - {provider}
     try:
-        keyring.set_password(_PACKAGE_NAME, _INDEX_USER, json.dumps(sorted(names)))
+        keyring.set_password(NAMESPACE, _INDEX_USER, json.dumps(sorted(names)))
     except keyring.errors.KeyringError as exc:  # the credential itself is stored; only listing suffers
         log.warning("could not update the stored-credentials index (%s)", exc)
 
@@ -66,7 +68,7 @@ def _update_index(provider: str, *, present: bool) -> None:
 def read_fields_from_env(provider: str, fields: list[str]) -> dict[str, str]:
     """Read whichever of `fields` are set as env vars for this provider.
 
-    Env var name: <PACKAGE>_<PROVIDER>_<FIELD>, e.g. MYCLI_OPENAI_API_KEY.
+    Env var name: <NAMESPACE>_<PROVIDER>_<FIELD>, e.g. MYCLI_OPENAI_API_KEY.
     """
     result: dict[str, str] = {}
     for field in fields:
@@ -76,7 +78,7 @@ def read_fields_from_env(provider: str, fields: list[str]) -> dict[str, str]:
     return result
 
 
-def _stored(provider: str, namespace: str = _PACKAGE_NAME) -> dict[str, str]:
+def _stored(provider: str, namespace: str = NAMESPACE) -> dict[str, str]:
     try:
         stored_raw = keyring.get_password(_service_name(provider, namespace), provider)
     except keyring.errors.KeyringError as exc:
@@ -88,7 +90,12 @@ def _stored(provider: str, namespace: str = _PACKAGE_NAME) -> dict[str, str]:
 
 
 def get_credential(
-    provider: str, *, env_fields: list[str] | None = None, legacy_env: dict[str, str] | None = None
+    provider: str,
+    *,
+    env_fields: list[str] | None = None,
+    legacy_env: dict[str, str] | None = None,
+    legacy_env_first: bool = False,
+    shared_namespaces: tuple[str, ...] = (),
 ) -> dict[str, str] | None:
     """Resolve the full credential bag for a provider.
 
@@ -96,70 +103,75 @@ def get_credential(
     can override a single field (e.g. a rotated token) without touching the
     rest. `env_fields` lets a multi-field provider (session cookies, host
     credentials, ...) declare its field names explicitly, so env vars are
-    checked even before anything has ever been stored. `legacy_env` maps a
-    field to an older env var name still honoured (`Provider.legacy_env`).
-    Fields this CLI doesn't have come from `SHARED_NAMESPACES` (serp).
+    checked even before anything has ever been stored. The other keyword
+    arguments mirror the `Provider` attributes of the same names (see
+    `locate_fields` for the order); providers call `Provider.credential()`.
     """
     stored = _stored(provider)
     fields = env_fields or list(stored.keys()) or ["api_key"]
-    located = _locate(provider, fields, legacy_env, stored)
+    located = _locate(provider, fields, legacy_env, legacy_env_first, shared_namespaces, stored)
     merged = {**stored, **{field: value for field, (value, _, _) in located.items()}}
     return merged or None
 
 
 def locate_fields(
-    provider: str, fields: list[str], *, legacy_env: dict[str, str] | None = None
+    provider: str,
+    fields: list[str],
+    *,
+    legacy_env: dict[str, str] | None = None,
+    legacy_env_first: bool = False,
+    shared_namespaces: tuple[str, ...] = (),
 ) -> dict[str, tuple[str, str, str]]:
     """Map each present field to (value, source "env" | "keychain", where: the env var or keychain service).
 
-    Precedence per field: `WORDSTAT_<PROVIDER>_<FIELD>` env var, the
-    `wordstat:<provider>` keychain entry, then the same pair of each shared
-    namespace (`SERP_*`, `serp:<provider>`), then the field's legacy env var
-    (`legacy_env`). Empty values count as absent. For `auth status`, which
-    reports the source and must never print the value — and for providers
-    loading their credential, so both always agree.
+    Order per field, first hit wins:
+    1. env var `<NAMESPACE>_<PROVIDER>_<FIELD>`, then the same for each shared namespace;
+    2. keychain `<namespace>:<provider>`, own namespace first, then shared ones;
+    3. the field's legacy env var (`legacy_env`) — or right after 1 with
+       `legacy_env_first` (for a tool whose users still set only the old name
+       while a stale keychain entry exists).
+    For `auth status`, which reports the source and must never print the value.
     """
-    return _locate(provider, fields, legacy_env, _stored(provider))
+    return _locate(provider, fields, legacy_env, legacy_env_first, shared_namespaces, _stored(provider))
 
 
 def _locate(
-    provider: str, fields: list[str], legacy_env: dict[str, str] | None, stored: dict[str, str]
+    provider: str,
+    fields: list[str],
+    legacy_env: dict[str, str] | None,
+    legacy_env_first: bool,
+    shared_namespaces: tuple[str, ...],
+    own_stored: dict[str, str],
 ) -> dict[str, tuple[str, str, str]]:
+    namespaces = (NAMESPACE, *shared_namespaces)
+    stored = {NAMESPACE: own_stored, **{ns: _stored(provider, ns) for ns in shared_namespaces}}
     located: dict[str, tuple[str, str, str]] = {}
-    for namespace in (_PACKAGE_NAME, *SHARED_NAMESPACES):
-        if all(field in located for field in fields):
-            break
-        # Чужую связку ключей читаем, только если своих полей не хватило.
-        bag = stored if namespace == _PACKAGE_NAME else _stored(provider, namespace)
-        for field in fields:
-            if field in located:
-                continue
-            env_name = _env_var_name(provider, field, namespace)
-            if value := os.environ.get(env_name):
-                located[field] = (value, "env", env_name)
-            elif value := bag.get(field):
-                located[field] = (value, "keychain", _service_name(provider, namespace))
-    for field, env_name in (legacy_env or {}).items():
-        if field in fields and field not in located and (value := os.environ.get(env_name)):
-            located[field] = (value, "env", env_name)
+    for field in fields:
+        env_names = [_env_var_name(provider, field, ns) for ns in namespaces]
+        legacy = [(legacy_env or {})[field]] if field in (legacy_env or {}) else []
+        env_first = env_names + legacy if legacy_env_first else env_names
+        for name in env_first:
+            if (value := os.environ.get(name)) is not None:
+                located[field] = (value, "env", name)
+                break
+        else:
+            for ns in namespaces:
+                if field in stored[ns]:
+                    located[field] = (stored[ns][field], "keychain", _service_name(provider, ns))
+                    break
+            else:
+                for name in [] if legacy_env_first else legacy:
+                    if (value := os.environ.get(name)) is not None:
+                        located[field] = (value, "env", name)
     return located
 
 
-def env_var_name(provider: str, field: str) -> str:
-    return _env_var_name(provider, field)
+def env_var_name(provider: str, field: str, namespace: str = NAMESPACE) -> str:
+    return _env_var_name(provider, field, namespace)
 
 
-def keychain_service(provider: str) -> str:
-    return _service_name(provider)
-
-
-def shared_env_var_names(provider: str, field: str) -> list[str]:
-    """Env vars of the shared namespaces for this field (SERP_*), in lookup order."""
-    return [_env_var_name(provider, field, namespace) for namespace in SHARED_NAMESPACES]
-
-
-def shared_keychain_services(provider: str) -> list[str]:
-    return [_service_name(provider, namespace) for namespace in SHARED_NAMESPACES]
+def keychain_service(provider: str, namespace: str = NAMESPACE) -> str:
+    return _service_name(provider, namespace)
 
 
 def store_backend() -> str | None:

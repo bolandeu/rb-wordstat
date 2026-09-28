@@ -72,13 +72,27 @@ class Provider:
     # `auth login --provider deploy:example.com`. `auth status` reports each
     # stored target separately and sets `target` before `health_check()`.
     per_target: ClassVar[bool] = False
-    # Older env var names still honoured, field -> name, checked after
-    # <PACKAGE>_<PROVIDER>_<FIELD>. In a subclass keep the annotation (ruff RUF012):
-    #     legacy_env: ClassVar[dict[str, str]] = {"api_key": "XMLRIVER_TOKEN"}
-    # and read credentials with
-    # `manager.get_credential(self.credential_name, env_fields=..., legacy_env=self.legacy_env)`.
+    # Older env var names still honoured, field -> name; looked up after the
+    # keychain unless `legacy_env_first`. In a subclass keep the annotation
+    # (ruff RUF012): legacy_env: ClassVar[dict[str, str]] = {"api_key": "XMLRIVER_TOKEN"}
     legacy_env: ClassVar[dict[str, str]] = {}
+    legacy_env_first: ClassVar[bool] = False
+    # Other CLIs' credential namespaces (their command names) to read this
+    # provider's credential from after our own — e.g. wordstat reading the
+    # key `serp auth login` stored: shared_namespaces = ("serp",). Read-only.
+    shared_namespaces: ClassVar[tuple[str, ...]] = ()
     target: str | None = None
+
+    def credential(self) -> dict[str, str] | None:
+        """This provider's credential, resolved with all of the options above (use it in auth_headers())."""
+        manager = importlib.import_module(f"{__name__.split('.')[0]}.credentials.manager")
+        return manager.get_credential(
+            self.credential_name,
+            env_fields=list(self.credential_fields),
+            legacy_env=self.legacy_env,
+            legacy_env_first=self.legacy_env_first,
+            shared_namespaces=self.shared_namespaces,
+        )
 
     @classmethod
     def for_health_check(cls, target: str | None = None) -> Provider:
@@ -112,7 +126,10 @@ def all_providers() -> list[type[Provider]]:
     """Every concrete Provider subclass defined in this package, sorted by name."""
     package = __name__.rsplit(".", 1)[0]
     for module in pkgutil.iter_modules(importlib.import_module(package).__path__):
-        importlib.import_module(f"{package}.{module.name}")
+        # base/http hold only abstract bases; importing http.py would pull in
+        # httpx for CLIs without HTTP providers (their subclasses import it anyway).
+        if module.name not in ("base", "http"):
+            importlib.import_module(f"{package}.{module.name}")
     found: set[type[Provider]] = set()
     pending = list(Provider.__subclasses__())
     while pending:
@@ -152,8 +169,8 @@ class WordstatProvider(Provider, ABC):
     url: ClassVar[str]
     balance_url: ClassVar[str]
     credential_fields: ClassVar[tuple[str, ...]] = ("user", "token")
-    # Устаревшие имена env-переменных по полям — последний источник доступов.
-    legacy_env: ClassVar[dict[str, str]] = {}
+    # Доступы XML River / XMLStock общие с CLI serp (`serp auth login`).
+    shared_namespaces: ClassVar[tuple[str, ...]] = ("serp",)
     # Тестовый шов для health_check (синхронный httpx.MockTransport).
     health_transport: httpx.BaseTransport | None = None
 
@@ -174,12 +191,18 @@ class WordstatProvider(Provider, ABC):
 
     @classmethod
     def load_credential(cls) -> dict[str, str] | None:
-        """Все `credential_fields`: свои env/keychain → общие с serp → legacy env. None, если не хватает.
+        """Все `credential_fields`: env WORDSTAT_*/SERP_* → keychain wordstat:/serp: → legacy env. None, если не хватает.
 
         Тот же поиск, что показывает `auth status` (`credentials.manager.locate_fields`).
         """
         fields = list(cls.credential_fields)
-        located = credentials.locate_fields(cls.name, fields, legacy_env=cls.legacy_env)
+        located = credentials.locate_fields(
+            cls.name,
+            fields,
+            legacy_env=cls.legacy_env,
+            legacy_env_first=cls.legacy_env_first,
+            shared_namespaces=cls.shared_namespaces,
+        )
         if all(field in located for field in fields):
             return {field: value for field, (value, _, _) in located.items()}
         return None

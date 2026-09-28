@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
+
+# `cache --help` shows the journal path and size, computed when the CLI is
+# imported — before any fixture runs. A fixed, never-created path keeps the
+# help snapshot independent of the developer's real wordstat.db.
+os.environ["WORDSTAT_DB_PATH"] = "/nonexistent/wordstat-journal/wordstat.db"
 
 
 @pytest.fixture(autouse=True)

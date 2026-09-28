@@ -1,0 +1,1 @@
+Шаблон cli-generator v1.2.8: общие с serp доступы и порядок источников — средствами шаблона (`shared_namespaces`). Порядок по полю теперь: env `WORDSTAT_*` → env `SERP_*` → keychain `wordstat:` → keychain `serp:` → старые `XMLRIVER_*`; пустая env-переменная считается заданной.

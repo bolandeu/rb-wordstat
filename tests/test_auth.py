@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import ClassVar
@@ -15,8 +16,8 @@ from rb_wordstat.providers import Health, Provider, Quota, XmlRiverProvider
 
 from .test_cli import invoke, invoke_json
 
-PKG = "wordstat"  # keychain service and env prefix: wordstat, not the package name (see core/version.py)
-PREFIX = PKG.upper()
+NS = "wordstat"  # keychain service and env prefix use the command name, not the package
+PREFIX = re.sub(r"[^A-Z0-9]", "_", NS.upper())
 GOOD, BAD = "good-secret-123", "bad-secret-456"
 
 
@@ -51,9 +52,7 @@ class Demo(Provider):
     expires_at: datetime | None = None
 
     def health_check(self) -> Health:
-        credential = credentials.get_credential(
-            self.credential_name, env_fields=list(self.credential_fields), legacy_env=self.legacy_env
-        )
+        credential = self.credential()
         if self.path == "/down":
             raise ProviderError(self.name, "ConnectError while calling GET /me")
         if (credential or {}).get("api_key") != GOOD:
@@ -202,12 +201,12 @@ def test_keychain_and_mixed_sources(demo_providers) -> None:
     _, payload, _ = status("--check", extra=None)
     entries = by_provider(payload)
     assert (entries["demo"]["source"], entries["demo"]["status"]) == ("keychain", "ok")
-    assert entries["demo"]["source_ref"] == f"keychain service {PKG}:demo"
+    assert entries["demo"]["source_ref"] == f"keychain service {NS}:demo"
 
     result = invoke("auth", "status", "--json", env={f"{PREFIX}_EXTRA_API_KEY": GOOD})
     extra = by_provider(json.loads(result.stdout))["extra"]
     assert extra["source"] == "env"
-    assert extra["source_ref"] == f"{PREFIX}_EXTRA_API_KEY; rest from keychain service {PKG}:extra"
+    assert extra["source_ref"] == f"{PREFIX}_EXTRA_API_KEY; rest from keychain service {NS}:extra"
 
 
 def test_provider_filter_and_unknown_provider(demo_providers) -> None:
@@ -256,6 +255,41 @@ def test_legacy_env_name_is_a_source(monkeypatch: pytest.MonkeyPatch, fake_keyri
     assert "OLD_LEGACY_TOKEN" in missing["source_ref"]
 
 
+def test_keychain_beats_legacy_env_unless_legacy_first(monkeypatch: pytest.MonkeyPatch, fake_keyring) -> None:
+    monkeypatch.setattr(providers, "all_providers", lambda: [Legacy])
+    credentials.store_credential("legacy", {"api_key": GOOD})
+    env = {"OLD_LEGACY_TOKEN": BAD}
+    entry = by_provider(json.loads(invoke("auth", "status", "--check", "--json", env=env).stdout))["legacy"]
+    assert (entry["source"], entry["status"]) == ("keychain", "ok")  # default: legacy env is the last resort
+
+    monkeypatch.setattr(Legacy, "legacy_env_first", True)
+    entry = by_provider(json.loads(invoke("auth", "status", "--check", "--json", env=env).stdout))["legacy"]
+    assert (entry["source"], entry["source_ref"], entry["status"]) == ("env", "OLD_LEGACY_TOKEN", "invalid")
+
+
+class Borrowed(Demo):
+    name = "xmlriver"
+    shared_namespaces = ("serp",)
+
+
+def test_shared_namespace_is_read(monkeypatch: pytest.MonkeyPatch, fake_keyring) -> None:
+    """A provider can read the credential another CLI stored (e.g. wordstat reading serp's key)."""
+    monkeypatch.setattr(providers, "all_providers", lambda: [Borrowed])
+    fake_keyring[("serp:xmlriver", "xmlriver")] = json.dumps({"api_key": GOOD})
+    entry = by_provider(json.loads(invoke("auth", "status", "--check", "--json").stdout))["xmlriver"]
+    assert (entry["source"], entry["status"]) == ("keychain", "ok")
+    assert entry["source_ref"] == "keychain service serp:xmlriver"
+    assert Borrowed().credential() == {"api_key": GOOD}
+
+    env = {"SERP_XMLRIVER_API_KEY": GOOD}
+    entry = by_provider(json.loads(invoke("auth", "status", "--json", env=env).stdout))["xmlriver"]
+    assert (entry["source"], entry["source_ref"]) == ("env", "SERP_XMLRIVER_API_KEY")
+
+    credentials.store_credential("xmlriver", {"api_key": BAD})  # our own namespace comes first
+    entry = by_provider(json.loads(invoke("auth", "status", "--check", "--json").stdout))["xmlriver"]
+    assert (entry["source_ref"], entry["status"]) == (f"keychain service {NS}:xmlriver", "invalid")
+
+
 # --- per-target providers: one entry per stored target --------------------------
 
 
@@ -279,7 +313,7 @@ def test_per_target_reports_each_stored_target(deploy_provider) -> None:
     entries = by_provider(payload)
     assert list(entries) == ["deploy:a.example.com", "deploy:b.example.com"]
     assert (entries["deploy:a.example.com"]["status"], entries["deploy:b.example.com"]["status"]) == ("ok", "invalid")
-    assert entries["deploy:a.example.com"]["source_ref"] == f"keychain service {PKG}:deploy:a.example.com"
+    assert entries["deploy:a.example.com"]["source_ref"] == f"keychain service {NS}:deploy:a.example.com"
     assert code == 3
 
     code, payload, _ = status("--check", "--provider", "deploy:a.example.com")

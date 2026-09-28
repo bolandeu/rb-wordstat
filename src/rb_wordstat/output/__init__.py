@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import logging
 import sys
+import weakref
 from collections.abc import Callable
 
 import typer
@@ -28,11 +29,13 @@ __all__ = [
     "help_if_no_command",
     "human",
     "is_dry_run",
+    "is_guarded",
     "require_confirmation",
     "vecho",
 ]
 
 _CLI_NAME = cli_name()
+_GUARDED: weakref.WeakSet[Callable] = weakref.WeakSet()
 
 # Reusable local options: attach to any command so `<cli> <command> --json`
 # works, on top of the global `<cli> --json <command>` handled by guard().
@@ -211,4 +214,10 @@ def guard(func: Callable) -> Callable:
     # Docstrings are the --help text; `{cli}` in their `Example:` lines becomes
     # this CLI's name, so template-born commands need no Jinja rendering.
     wrapper.__doc__ = (func.__doc__ or "").replace("{cli}", _CLI_NAME) or None
+    _GUARDED.add(wrapper)
     return wrapper
+
+
+def is_guarded(func: Callable) -> bool:
+    """Whether `func` is an `output.guard` wrapper — tests/test_help.py requires it of every command."""
+    return func in _GUARDED

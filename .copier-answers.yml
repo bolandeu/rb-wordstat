@@ -1,12 +1,15 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.2.3
+_commit: v1.2.8
 _src_path: gh:bolandeu/cli-generator
 author_name: bolandeu
 cli_name: wordstat
 description: Частотность Яндекс.Wordstat через провайдеров (XML River, XMLStock) с
     фолбэком
 dist_name: rb-wordstat
+dist_name_legacy: ''
 include_auth: true
+include_ci: true
 package_name: rb_wordstat
+private_deps: false
 project_name: wordstat
 repository_url: https://github.com/bolandeu/wordstat

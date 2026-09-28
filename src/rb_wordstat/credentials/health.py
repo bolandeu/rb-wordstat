@@ -64,20 +64,24 @@ def _run_check(provider_cls: type[Provider], target: str | None) -> Health:
         return Health(status="unreachable", message=f"{type(exc).__name__}: {exc}")
 
 
+def _env_ref(name: str, field: str, shared: tuple[str, ...], legacy: dict[str, str]) -> str:
+    # wordstat: shared namespaces (SERP_*) are named too, not only the legacy var.
+    others = [manager.env_var_name(name, field, ns) for ns in shared] + ([legacy[field]] if field in legacy else [])
+    return manager.env_var_name(name, field) + (f" (or {', '.join(others)})" if others else "")
+
+
 def _entry(provider_cls: type[Provider], check: bool, target: str | None = None) -> dict:
     name = f"{provider_cls.name}:{target}" if target else provider_cls.name
     fields = list(provider_cls.credential_fields)
     legacy = provider_cls.legacy_env
-    located = manager.locate_fields(name, fields, legacy_env=legacy)
+    shared = provider_cls.shared_namespaces
+    located = manager.locate_fields(
+        name, fields, legacy_env=legacy, legacy_env_first=provider_cls.legacy_env_first, shared_namespaces=shared
+    )
     secrets = [value for value, _, _ in located.values()]
-    # wordstat: доступы общие с serp — в source_ref и его места (SERP_*, serp:<provider>).
-    env_refs = [
-        manager.env_var_name(name, field)
-        + f" (or {', '.join([*manager.shared_env_var_names(name, field), *([legacy[field]] if field in legacy else [])])})"
-        for field in fields
-    ]
-    keychain_ref = "keychain service " + " or ".join(
-        [manager.keychain_service(name), *manager.shared_keychain_services(name)]
+    env_refs = [_env_ref(name, field, shared, legacy) for field in fields]
+    keychain_ref = f"keychain service {manager.keychain_service(name)}" + "".join(
+        f" or {manager.keychain_service(name, ns)}" for ns in shared
     )
     missing = [field for field in fields if field not in located]
     sources = {source for _, source, _ in located.values()}
@@ -99,13 +103,13 @@ def _entry(provider_cls: type[Provider], check: bool, target: str | None = None)
 
     # Env vars override the keychain field by field; a mix is reported as env
     # (what wins) with every place named in source_ref (standard §8: no "mixed").
-    used_env = [located[f][2] for f in fields if located[f][1] == "env"]
-    used_keychain = sorted({located[f][2] for f in fields if located[f][1] == "keychain"})
-    keychain_ref = f"keychain service {', '.join(used_keychain)}"
+    used_env = list(dict.fromkeys(located[f][2] for f in fields if located[f][1] == "env"))
+    services = list(dict.fromkeys(located[f][2] for f in fields if located[f][1] == "keychain"))
+    used_keychain = "keychain service " + ", ".join(services) if services else ""
     if sources == {"keychain"}:
-        entry.update(source="keychain", source_ref=keychain_ref)
+        entry.update(source="keychain", source_ref=used_keychain)
     else:
-        refs = ", ".join(used_env) + (f"; rest from {keychain_ref}" if "keychain" in sources else "")
+        refs = ", ".join(used_env) + (f"; rest from {used_keychain}" if services else "")
         entry.update(source="env", source_ref=refs)
 
     if not check:

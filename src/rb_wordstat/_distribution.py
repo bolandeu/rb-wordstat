@@ -5,3 +5,7 @@
 # mapped from package to distribution at runtime, so it is written down here.
 # tests/test_cli.py fails if it drifts from pyproject.toml.
 DIST_NAME = "rb-wordstat"
+# The previous distribution name during a rename (standard §10): an install made
+# under it (not yet reinstalled) still finds its own version. Drop it once
+# every machine has the new name.
+DIST_NAME_LEGACY: str | None = None

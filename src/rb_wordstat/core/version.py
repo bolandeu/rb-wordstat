@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import functools
-from importlib.metadata import PackageNotFoundError, distribution, metadata
-from importlib.metadata import version as pkg_version
+import importlib.util
+from importlib.metadata import Distribution, PackageNotFoundError, distribution
 
-from .._distribution import DIST_NAME
+from .._distribution import DIST_NAME, DIST_NAME_LEGACY
 
 _PACKAGE_NAME = __name__.split(".")[0]
 
@@ -15,6 +15,30 @@ _PACKAGE_NAME = __name__.split(".")[0]
 CLI_NAME = "wordstat"
 
 DEV_VERSION = "0.0.0-dev"
+
+
+def _distribution() -> Distribution:
+    """This package's installed distribution: by DIST_NAME, else by DIST_NAME_LEGACY (a rename in progress)."""
+    for name in (DIST_NAME, DIST_NAME_LEGACY):
+        if name:
+            try:
+                return distribution(name)
+            except PackageNotFoundError:
+                continue
+    raise PackageNotFoundError(DIST_NAME)
+
+
+def module_exists(name: str) -> bool:
+    """Whether module `name` (dotted) can be imported, without importing it.
+
+    For optional parts a generated CLI may not have (`credentials.manager`,
+    `commands.login`): probe the module, never its package — a directory
+    left holding only `__pycache__` still imports as a namespace package.
+    """
+    try:
+        return importlib.util.find_spec(name) is not None
+    except ModuleNotFoundError:  # a parent package is missing entirely
+        return False
 
 
 @functools.cache
@@ -30,7 +54,7 @@ def cli_name() -> str:
     separate name: what `uv tool install/upgrade` and dependencies use.
     """
     try:
-        entry_points = distribution(DIST_NAME).entry_points
+        entry_points = _distribution().entry_points
     except PackageNotFoundError:
         return _PACKAGE_NAME
     for entry_point in entry_points:
@@ -42,7 +66,7 @@ def cli_name() -> str:
 def package_summary() -> str:
     """The one-line `description` from pyproject.toml, as installed."""
     try:
-        return metadata(DIST_NAME)["Summary"] or ""
+        return _distribution().metadata["Summary"] or ""
     except PackageNotFoundError:
         return ""
 
@@ -55,6 +79,6 @@ def installed_version() -> str | None:
     anything that would compare versions.
     """
     try:
-        return pkg_version(DIST_NAME)
+        return _distribution().version
     except PackageNotFoundError:
         return None

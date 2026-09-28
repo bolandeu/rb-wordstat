@@ -3,7 +3,7 @@
 
  Журнал всех ответов провайдеров (он же кэш для --cache).
 
- Журнал ответов: /Users/bolandau/Library/Application Support/wordstat/wordstat.db — 48 КБ.
+ Журнал ответов: /nonexistent/wordstat-journal/wordstat.db — пока пуст.
 
 ╭─ Параметры ──────────────────────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                                      │
