@@ -146,3 +146,22 @@ and `tests/test_help.py` in the gate. If a hook fires on a refactor that
 truly doesn't change behaviour, say so — don't bypass it silently. `src/rb_wordstat/data/SKILL.md`
 deliberately lists no commands, only conventions; touch it only if a
 convention changes (a new exit code, a new credential rule).
+
+## Inside the tools system
+
+This tool is one service among many; the root `~/Projects/tools/` agent
+deploys it, keeps its credentials (Doppler) and backs up its data (S3).
+Full rules: `~/Projects/tools/docs/standard-release.md` §13.
+
+- **Report to the root agent** (in the report to the user, next to the
+  release tag): a new or renamed env var / credential, a new local database
+  or changed data path, a new or dropped dependency on another tool, a
+  refreshed token written back locally, a breaking release.
+- **Consumers**: before a breaking change, check who uses this tool (root
+  `AGENTS.md` → Service map) and name them in the report.
+- **Headless Linux servers**: env vars first, keychain optional (a missing
+  keychain is not an error when the env var is set); reuse existing env var
+  names; no prompts without a TTY; no Mac-only paths.
+- **Local data** lives in `platformdirs.user_data_dir("<tool>")`, never in
+  the repo; all state in the database file, migrations run by the tool; the
+  tool never uploads or syncs its data itself.
