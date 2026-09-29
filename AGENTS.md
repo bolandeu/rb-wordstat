@@ -105,6 +105,13 @@ Logging is stdlib `logging` (logger `rb_wordstat`), never `print`.
   `uv run scripts/release.py patch|minor|major` — gate, towncrier build,
   commit `Release vX.Y.Z`, annotated tag. It prints the push command;
   pushing needs the user's confirmation.
+- **Every user-visible change ships as a release.** Servers, other tools
+  and the Mac install only from tags, never from `main`, so a merged change
+  without a release is invisible to them. A change that needs a fragment is
+  done only after the release: merge to `main`, run `release.py`, ask the
+  user to push with `--follow-tags`, and name the new tag in the report.
+  Maintenance-only commits (no fragment) wait for the next release. Don't
+  leave a fragment unreleased on `main` without naming the reason.
 - **SemVer is a promise about the CLI surface.** Removing/renaming/changing
   commands, flags, the `--json` shape, exit or error codes is breaking —
   major, or **minor while at `0.x`**. A new feature with old behaviour
