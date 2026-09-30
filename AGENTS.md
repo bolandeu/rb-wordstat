@@ -149,9 +149,9 @@ convention changes (a new exit code, a new credential rule).
 
 ## Inside the tools system
 
-This tool is one service among many; the root `~/Projects/tools/` agent
+This tool is one service among many; the root `~/Work/tools/` agent
 deploys it, keeps its credentials (Doppler) and backs up its data (S3).
-Full rules: `~/Projects/tools/docs/standard-release.md` §13.
+Full rules: `~/Work/tools/docs/standard-release.md` §13.
 
 - **Report to the root agent** (in the report to the user, next to the
   release tag): a new or renamed env var / credential, a new local database
