@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sqlite3
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+
+import sqlalchemy as sa
 
 from ..providers import WordstatProvider, provider_class
 from .cache import ResponseCache
@@ -59,6 +60,8 @@ class WordstatClient:
 
         `use_cache` — сначала журнал (не старше `max_age`), живой запрос — только если там нет.
         """
+        if self.cache is not None:
+            self.cache.engine  # noqa: B018 — база недоступна (DATABASE_*) — до платных запросов, а не после
         # Семафор и экземпляры провайдеров — на один вызов: они привязаны к
         # event loop, а search_sync каждый раз запускает новый.
         semaphore = asyncio.Semaphore(_MAX_CONCURRENT)
@@ -115,7 +118,7 @@ class WordstatClient:
             # формат ответа у каждого свой, разбирает его свой класс.
             for index, name in enumerate(names):
                 hit = self.cache.latest(
-                    provider=name, freq_type=freq_type.value, region=str(lr), query=query, max_age=max_age
+                    provider=name, freq_type=freq_type.value, region=lr, query=query, max_age=max_age
                 )
                 if hit is not None:
                     result = self._class(index).to_result(hit.data, query, freq_type)
@@ -152,9 +155,9 @@ class WordstatClient:
         if self.cache is not None:
             try:
                 return self.cache.put(
-                    provider=provider, freq_type=freq_type.value, region=str(lr), query=query, total_value=total,
+                    provider=provider, freq_type=freq_type.value, region=lr, query=query, total_value=total,
                     data=data,
                 )  # fmt: skip
-            except sqlite3.Error as exc:
-                log.warning("Не удалось записать ответ в журнал %s: %s", self.cache.path, exc)
+            except sa.exc.SQLAlchemyError as exc:
+                log.warning("Не удалось записать ответ в журнал: %s", exc)
         return datetime.now(UTC)

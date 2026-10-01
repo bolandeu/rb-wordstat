@@ -22,6 +22,14 @@ def _num(value: int) -> str:
     return f"{value:,}".replace(",", " ")
 
 
+def _when(result: WordstatResult) -> str:
+    """От какого числа данные (местное время) и откуда: живой запрос или журнал."""
+    if result.fetched_at is None:
+        return ""
+    when = result.fetched_at.astimezone().strftime("%d.%m.%Y %H:%M")
+    return f"{when}, из журнала" if result.from_cache else when
+
+
 def _keywords_table(title: str, entries: list[WordstatEntry]) -> None:
     if not entries:
         return
@@ -42,16 +50,19 @@ def _render(results: list[WordstatResult], show_keywords: bool) -> None:
     for query, rows in by_query.items():
         console.rule(f"[bold]{query}[/bold]")
         if len(rows) == 1:
+            when = _when(rows[0])
             console.print(
                 f"[bold]Частота ({rows[0].freq_type.label}):[/bold] [yellow]{_num(rows[0].total_value)}[/yellow]"
+                + (f" [dim]· данные от {when}[/dim]" if when else "")
             )
         else:
             table = Table(show_header=True, header_style="bold cyan")
             table.add_column("Тип", width=18)
             table.add_column("Оператор", width=40, overflow="fold")
             table.add_column("Частота", justify="right", width=12)
+            table.add_column("Данные от", style="dim")
             for r in rows:
-                table.add_row(r.freq_type.label, r.freq_type.apply(r.query), _num(r.total_value))
+                table.add_row(r.freq_type.label, r.freq_type.apply(r.query), _num(r.total_value), _when(r))
             console.print(table)
         broad = next((r for r in rows if r.freq_type == FreqType.broad), None)
         if show_keywords and broad:

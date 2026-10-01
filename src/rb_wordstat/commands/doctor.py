@@ -5,7 +5,7 @@ from pathlib import Path
 import typer
 
 from .. import output
-from ..core import services
+from ..core import db, deps, services
 from ..core.cache import ResponseCache
 from ..core.errors import CliTooOld, InvalidArguments
 from ..core.models import DEFAULT_PROVIDERS, ProjectConfig
@@ -46,7 +46,7 @@ def doctor(
     quiet: bool = output.QuietOption,
     verbose: bool = output.VerboseOption,
 ) -> None:
-    """Диагностика: версия, проект, настройки, журнал, связка ключей, доступы провайдеров.
+    """Диагностика: версия, проект, настройки, база и её схема, журнал, связка ключей, доступы.
 
     Всегда завершается с кодом 0 — результат это сам отчёт; `healthy`
     говорит, прошли ли все проверки. Доступы здесь — только наличие; работают
@@ -77,6 +77,7 @@ def doctor(
         except CliTooOld as exc:
             checks.append({"name": "cli_compat", "ok": False, "detail": exc.message})
 
+    checks.extend(db.doctor_checks())
     try:
         stats = ResponseCache().stats()
         checks.append({"name": "cache", "ok": True, "detail": f"{stats.path} ({stats.entries} записей)"})
@@ -84,6 +85,7 @@ def doctor(
         checks.append({"name": "cache", "ok": False, "detail": f"журнал недоступен: {exc}"})
 
     checks.extend(_auth_checks(config.providers if config else DEFAULT_PROVIDERS))
+    checks.extend(deps.doctor_checks())  # [[tool.rb.external]] in pyproject.toml
 
     all_ok = all(check["ok"] for check in checks)
     output.emit_success(

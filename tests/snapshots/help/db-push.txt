@@ -1,0 +1,26 @@
+
+ Usage: wordstat db push [OPTIONS]
+
+ Send new rows of the push tables from the local SQLite to production.
+
+ Production is the PostgreSQL in `<CLI>_PROD_DATABASE_URL`; its schema
+ revision must match this CLI's. Rows go in
+ without their ids; one whose natural key is already there is skipped.
+ One transaction; --dry-run counts exactly and writes nothing.
+
+ Example: wordstat db push --since 2026-10-01 --dry-run
+
+╭─ Параметры ──────────────────────────────────────────────────────────────────────────────────────╮
+│ --table          <str>                                   Only this push table (repeatable;       │
+│                                                          default: all of them).                  │
+│ --since          <%Y-%m-%d|%Y-%m-%dT%H:%M:%S|%Y-%m-%d    Only rows created at or after this      │
+│                  %H:%M:%S>                               date/time.                              │
+│ --where          <str>                                   Extra SQL condition on the local table, │
+│                                                          e.g. "region = 213".                    │
+│ --json                                                   Машиночитаемый вывод: JSON в stdout.    │
+│ --quiet                                                  Не печатать ничего, кроме данных.       │
+│ --dry-run                                                Показать, что будет сделано, ничего не  │
+│                                                          меняя.                                  │
+│ --help                                                   Show this message and exit.             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

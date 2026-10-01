@@ -1,0 +1,15 @@
+
+ Usage: wordstat db [OPTIONS] COMMAND [ARGS]...
+
+ Manage the tool's database (shared PostgreSQL or local SQLite).
+
+╭─ Параметры ──────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Команды ────────────────────────────────────────────────────────────────────────────────────────╮
+│ status         Show which database is used and its schema revision against this CLI's.           │
+│ upgrade        Apply pending schema migrations to the database.                                  │
+│ import-sqlite  Copy a local SQLite database into the configured database, once.                  │
+│ push           Send new rows of the push tables from the local SQLite to production.             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

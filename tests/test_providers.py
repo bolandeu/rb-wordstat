@@ -1,3 +1,5 @@
+"""The provider contract: every provider implements health_check(), discovery finds them."""
+
 from __future__ import annotations
 
 import gc

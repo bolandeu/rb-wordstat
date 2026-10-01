@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.2.8
+_commit: v1.4.1
 _src_path: gh:bolandeu/cli-generator
 author_name: bolandeu
 cli_name: wordstat
@@ -9,6 +9,8 @@ dist_name: rb-wordstat
 dist_name_legacy: ''
 include_auth: true
 include_ci: true
+include_db: true
+include_http_provider: false
 package_name: rb_wordstat
 private_deps: false
 project_name: wordstat

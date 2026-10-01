@@ -1,58 +1,38 @@
 """Журнал всех ответов провайдеров — он же кэш.
 
-Каждый полученный ответ пишется сюда всегда (вся история, сжатый сырой JSON).
-Ключ — провайдер, тип частоты, регион и запрос: форматы ответов у провайдеров
+Каждый полученный ответ пишется сюда всегда (вся история, сжатый сырой JSON),
+новой строкой: старые ответы не перезаписываются. Ключ — провайдер, тип
+частоты, регион и запрос (`norm_phrase`): форматы ответов у провайдеров
 разные, так что ответ одного не подменяет другой. Читать из кэша вызывающий
 решает сам (`wordstat search --cache`): берётся самая свежая запись по ключу.
 
-Почему sqlite3 из стандартной библиотеки, а не готовый кэш — как в serp:
-hishel ключует по URL, а в нём логин и ключ провайдера; diskcache — это
-key→value без истории и выборки по дате. Нужны история, поиск по дате и
-размер — это SQL-таблица.
+Хранится в базе инструмента (`core/db.py`, таблица `wordstat_responses`): общая
+PostgreSQL при `WORDSTAT_DATABASE_URL`, иначе локальный SQLite. Свой кэш, а не
+готовый, как в serp: hishel ключует по URL, а в нём логин и ключ провайдера;
+diskcache — это key→value без истории и выборки по дате.
 """
 
 from __future__ import annotations
 
-import contextlib
 import json
-import os
-import sqlite3
 import zlib
-from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import platformdirs
+import sqlalchemy as sa
 from pydantic import BaseModel
 
-from .version import CLI_NAME
-
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS responses (
-    id INTEGER PRIMARY KEY,
-    fetched_at TEXT NOT NULL,
-    provider TEXT NOT NULL,
-    freq_type TEXT NOT NULL,
-    region TEXT NOT NULL,
-    query TEXT NOT NULL,
-    query_key TEXT NOT NULL,
-    total_value INTEGER NOT NULL,
-    data BLOB NOT NULL
-);
-CREATE INDEX IF NOT EXISTS responses_lookup ON responses (provider, freq_type, region, query_key, fetched_at);
-CREATE INDEX IF NOT EXISTS responses_date ON responses (fetched_at);
-"""
+from . import db
+from .normalize import norm_phrase
+from .tables import responses
 
 
 def default_path() -> Path:
-    """`WORDSTAT_DB_PATH` или папка данных приложения (~/Library/Application Support/wordstat на macOS).
+    """Локальный файл базы: `WORDSTAT_DB_PATH` или папка данных приложения (~/Library/Application Support/wordstat).
 
     Не папка кэша: это журнал всей истории, а Caches чистят ОС и программы-уборщики.
     """
-    explicit = os.environ.get(f"{CLI_NAME.upper()}_DB_PATH")
-    return (
-        Path(explicit) if explicit else Path(platformdirs.user_data_dir(CLI_NAME, appauthor=False)) / f"{CLI_NAME}.db"
-    )
+    return db.sqlite_path()
 
 
 def human_size(num_bytes: int) -> str:
@@ -71,14 +51,21 @@ def files_size(path: Path) -> int:
 
 def help_line() -> str:
     """Строка для --help: где журнал и сколько весит — без открытия базы."""
+    if db.database_url():
+        return f"Журнал ответов: PostgreSQL из {db.ENV_VAR}."
     path = default_path()
     size = files_size(path)
     return f"Журнал ответов: {path} — {human_size(size) if size else 'пока пуст'}."
 
 
 def query_key(query: str) -> str:
-    """Регистр и лишние пробелы на частоту не влияют — и на ключ тоже."""
-    return " ".join(query.lower().split())
+    """Регистр, ё и лишние пробелы на частоту не влияют — и на ключ тоже."""
+    return norm_phrase(query)
+
+
+def _utc(value: datetime) -> datetime:
+    """SQLite отдаёт даты без пояса; пишем всегда UTC."""
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 class CachedResponse(BaseModel):
@@ -92,7 +79,7 @@ class CacheEntry(BaseModel):
     fetched_at: datetime
     provider: str
     freq_type: str
-    region: str
+    region: int
     query: str
     total_value: int
     size: int
@@ -108,104 +95,116 @@ class CacheStats(BaseModel):
 
 
 class ResponseCache:
-    def __init__(self, path: Path | None = None) -> None:
-        self.path = path or default_path()
+    """Журнал в базе инструмента. `engine` — для тестов и библиотеки; по умолчанию `db.open_db()` при первом обращении."""
 
-    @contextlib.contextmanager
-    def _connect(self) -> Iterator[sqlite3.Connection]:
-        """Соединение на одну операцию: commit при успехе, rollback при ошибке, всегда close."""
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self.path, timeout=30)
-        try:
-            conn.execute("PRAGMA journal_mode=WAL")  # несколько wordstat одновременно — без блокировок
-            conn.executescript(_SCHEMA)
-            with conn:
-                yield conn
-        finally:
-            conn.close()
+    def __init__(self, engine: sa.Engine | None = None) -> None:
+        self._engine = engine
 
-    def put(self, *, provider: str, freq_type: str, region: str, query: str, total_value: int, data: dict) -> datetime:
+    @property
+    def engine(self) -> sa.Engine:
+        """Открыть базу (SQLite — с миграцией, PostgreSQL — с проверкой ревизии); ошибки — DATABASE_*."""
+        if self._engine is None:
+            self._engine = db.open_db()
+        return self._engine
+
+    @property
+    def location(self) -> str:
+        """Где журнал: путь к файлу SQLite или адрес PostgreSQL без пароля."""
+        engine = self.engine
+        return engine.url.database or "" if engine.dialect.name == "sqlite" else db.describe(engine)
+
+    def put(
+        self, *, provider: str, freq_type: str, region: int | str, query: str, total_value: int, data: dict
+    ) -> datetime:
         fetched_at = datetime.now(UTC)
         blob = zlib.compress(json.dumps(data, ensure_ascii=False).encode("utf-8"))
-        with self._connect() as conn:
+        with self.engine.begin() as conn:
             conn.execute(
-                "INSERT INTO responses (fetched_at, provider, freq_type, region, query, query_key, total_value, data)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (fetched_at.isoformat(), provider, freq_type, region, query, query_key(query), total_value, blob),
-            )
+                sa.insert(responses).values(
+                    fetched_at=fetched_at, provider=provider, freq_type=freq_type, region=int(region), phrase=query,
+                    phrase_key=query_key(query), total_value=total_value, data=blob,
+                )
+            )  # fmt: skip
         return fetched_at
 
     def latest(
-        self, *, provider: str, freq_type: str, region: str, query: str, max_age: timedelta | None = None
+        self, *, provider: str, freq_type: str, region: int | str, query: str, max_age: timedelta | None = None
     ) -> CachedResponse | None:
         """Самая свежая запись этого провайдера по ключу, или None."""
-        sql = "SELECT data, provider, fetched_at FROM responses WHERE provider=? AND freq_type=? AND region=? AND query_key=?"
-        args: list = [provider, freq_type, region, query_key(query)]
+        t = responses.c
+        sql = sa.select(t.data, t.provider, t.fetched_at).where(
+            t.provider == provider, t.freq_type == freq_type, t.region == int(region), t.phrase_key == query_key(query)
+        )
         if max_age is not None:
-            sql += " AND fetched_at >= ?"
-            args.append(_cutoff(max_age))
-        with self._connect() as conn:
-            row = conn.execute(sql + " ORDER BY fetched_at DESC LIMIT 1", args).fetchone()
+            sql = sql.where(t.fetched_at >= _cutoff(max_age))
+        with self.engine.connect() as conn:
+            row = conn.execute(sql.order_by(t.fetched_at.desc()).limit(1)).first()
         if row is None:
             return None
         return CachedResponse(
-            data=json.loads(zlib.decompress(row[0]).decode("utf-8")),
-            provider=row[1],
-            fetched_at=datetime.fromisoformat(row[2]),
-        )
+            data=json.loads(zlib.decompress(row.data).decode("utf-8")), provider=row.provider,
+            fetched_at=_utc(row.fetched_at),
+        )  # fmt: skip
 
     def stats(self) -> CacheStats:
-        with self._connect() as conn:
+        t = responses.c
+        engine = self.engine
+        with engine.connect() as conn:
             count, oldest, newest = conn.execute(
-                "SELECT COUNT(*), MIN(fetched_at), MAX(fetched_at) FROM responses"
-            ).fetchone()
-            by_provider = dict(conn.execute("SELECT provider, COUNT(*) FROM responses GROUP BY provider").fetchall())
+                sa.select(sa.func.count(), sa.func.min(t.fetched_at), sa.func.max(t.fetched_at))
+            ).one()
+            by_provider = dict(conn.execute(sa.select(t.provider, sa.func.count()).group_by(t.provider)).all())
+            if engine.dialect.name == "sqlite":
+                size = files_size(Path(engine.url.database or ""))
+            else:
+                size = conn.execute(sa.select(sa.func.pg_total_relation_size(responses.name))).scalar_one()
         return CacheStats(
-            path=str(self.path),
-            file_size=files_size(self.path),
+            path=self.location,
+            file_size=size,
             entries=count,
-            oldest=datetime.fromisoformat(oldest) if oldest else None,
-            newest=datetime.fromisoformat(newest) if newest else None,
+            oldest=_utc(oldest) if oldest else None,
+            newest=_utc(newest) if newest else None,
             by_provider=by_provider,
         )
 
     def entries(self, *, query: str | None = None, limit: int = 50) -> list[CacheEntry]:
         """Последние записи журнала (без ответов), свежие первыми; `query` — подстрока запроса."""
-        sql = "SELECT id, fetched_at, provider, freq_type, region, query, total_value, LENGTH(data) FROM responses"
-        args: list = []
+        t = responses.c
+        sql = sa.select(
+            t.id, t.fetched_at, t.provider, t.freq_type, t.region, t.phrase, t.total_value, sa.func.length(t.data)
+        )
         if query:
-            sql += " WHERE query_key LIKE ?"
-            args.append(f"%{query_key(query)}%")
-        with self._connect() as conn:
-            rows = conn.execute(sql + " ORDER BY fetched_at DESC LIMIT ?", [*args, limit]).fetchall()
+            sql = sql.where(t.phrase_key.contains(query_key(query), autoescape=True))
+        with self.engine.connect() as conn:
+            rows = conn.execute(sql.order_by(t.fetched_at.desc()).limit(limit)).all()
         return [
             CacheEntry(
-                id=r[0], fetched_at=datetime.fromisoformat(r[1]), provider=r[2], freq_type=r[3], region=r[4],
-                query=r[5], total_value=r[6], size=r[7],
+                id=r[0], fetched_at=_utc(r[1]), provider=r[2], freq_type=r[3], region=r[4], query=r[5],
+                total_value=r[6], size=r[7],
             )
             for r in rows
         ]  # fmt: skip
 
     def count_older(self, older_than: timedelta | None) -> int:
         """Сколько записей удалит `clear` с тем же аргументом (None — все)."""
-        with self._connect() as conn:
-            if older_than is None:
-                return conn.execute("SELECT COUNT(*) FROM responses").fetchone()[0]
-            return conn.execute(
-                "SELECT COUNT(*) FROM responses WHERE fetched_at < ?", [_cutoff(older_than)]
-            ).fetchone()[0]
+        sql = sa.select(sa.func.count()).select_from(responses)
+        if older_than is not None:
+            sql = sql.where(responses.c.fetched_at < _cutoff(older_than))
+        with self.engine.connect() as conn:
+            return conn.execute(sql).scalar_one()
 
     def clear(self, older_than: timedelta | None) -> int:
-        """Удалить записи старше `older_than` (None — все) и вернуть место на диске."""
-        with self._connect() as conn:
-            if older_than is None:
-                deleted = conn.execute("DELETE FROM responses").rowcount
-            else:
-                deleted = conn.execute("DELETE FROM responses WHERE fetched_at < ?", [_cutoff(older_than)]).rowcount
-        with self._connect() as conn:
-            conn.execute("VACUUM")  # иначе файл не уменьшится
+        """Удалить записи старше `older_than` (None — все); локальный файл ещё и сжать."""
+        sql = sa.delete(responses)
+        if older_than is not None:
+            sql = sql.where(responses.c.fetched_at < _cutoff(older_than))
+        with self.engine.begin() as conn:
+            deleted = conn.execute(sql).rowcount
+        if self.engine.dialect.name == "sqlite":
+            with self.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                conn.exec_driver_sql("VACUUM")  # иначе файл не уменьшится
         return deleted
 
 
-def _cutoff(age: timedelta) -> str:
-    return (datetime.now(UTC) - age).isoformat()
+def _cutoff(age: timedelta) -> datetime:
+    return datetime.now(UTC) - age

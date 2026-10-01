@@ -9,3 +9,9 @@ DIST_NAME = "rb-wordstat"
 # under it (not yet reinstalled) still finds its own version. Drop it once
 # every machine has the new name.
 DIST_NAME_LEGACY: str | None = None
+# The command name (`cli_name`) as an identifier: the namespace of this tool's
+# shared-database names (core/db.py) — table prefix `<TOOL>_`, env var
+# `<TOOL>_DATABASE_URL`, Alembic table `alembic_version_<TOOL>`. Written down,
+# not derived at runtime: a bare source run falls back to the package name,
+# and a table name must never depend on how the tool was started.
+TOOL = "wordstat"

@@ -131,3 +131,19 @@ def test_every_parameter_has_help(path: tuple[str, ...]) -> None:
 @pytest.mark.parametrize("path", sorted(GROUPS), ids=_slug)
 def test_every_group_has_help(path: tuple[str, ...]) -> None:
     assert (GROUPS[path].info.help or "").strip(), f"group `{_slug(path)}` has no description"
+
+
+def test_help_keeps_brackets() -> None:
+    """Typer renders help as rich markup, which drops `[...]`; output.guard escapes docstrings."""
+
+    def cmd(ctx: typer.Context) -> None:
+        """Declared in [[tool.rb.external]], see [x].
+
+        Example: {cli} cmd
+        """
+
+    probe = typer.Typer()
+    probe.command("cmd")(output.guard(cmd))
+    probe.command("other")(output.guard(cmd))
+    result = CliRunner().invoke(probe, ["cmd", "--help"], env=HELP_ENV)
+    assert "[[tool.rb.external]], see [x]." in result.output

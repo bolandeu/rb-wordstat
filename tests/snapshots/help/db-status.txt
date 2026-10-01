@@ -1,0 +1,13 @@
+
+ Usage: wordstat db status [OPTIONS]
+
+ Show which database is used and its schema revision against this CLI's.
+
+ Example: wordstat db status --json
+
+╭─ Параметры ──────────────────────────────────────────────────────────────────────────────────────╮
+│ --json           Машиночитаемый вывод: JSON в stdout.                                            │
+│ --quiet          Не печатать ничего, кроме данных.                                               │
+│ --help           Show this message and exit.                                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

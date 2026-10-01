@@ -8,7 +8,7 @@ import typer
 from typer import rich_utils
 
 from . import output
-from .commands import auth, doctor, init, search, skill, status
+from .commands import auth, db, doctor, init, search, skill, status
 from .commands import cache as cache_cmd
 from .commands import config as config_cmd
 from .core.cache import help_line as cache_help_line
@@ -38,6 +38,7 @@ app.add_typer(config_cmd.app, name="config")
 app.add_typer(auth.app, name="auth")  # `auth status` in every CLI; login/logout only with credentials
 app.add_typer(skill.app, name="skill")
 app.add_typer(cache_cmd.app, name="cache")
+app.add_typer(db.app, name="db")
 
 app.command(name="init")(init.init)
 app.command(name="status")(status.status)

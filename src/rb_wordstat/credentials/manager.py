@@ -78,13 +78,22 @@ def read_fields_from_env(provider: str, fields: list[str]) -> dict[str, str]:
     return result
 
 
+# Set on the first keychain failure in this process (headless Linux, CI): the
+# env-var path must keep working, and a server that supplies every key through
+# env shouldn't log about it on each lookup. Logged once at DEBUG; a WARNING
+# only when a field then turns out to be missing everywhere (_locate).
+_keychain_problem: str | None = None
+_warned_missing = False
+
+
 def _stored(provider: str, namespace: str = NAMESPACE) -> dict[str, str]:
+    global _keychain_problem
     try:
         stored_raw = keyring.get_password(_service_name(provider, namespace), provider)
     except keyring.errors.KeyringError as exc:
-        # A missing/locked keychain (headless Linux, CI) must not block the
-        # env-var path — that's the whole point of having a fallback.
-        log.warning("OS credential store unavailable (%s); using environment variables only", exc)
+        if _keychain_problem is None:
+            _keychain_problem = str(exc)
+            log.debug("OS credential store unavailable (%s); using environment variables only", exc)
         return {}
     return json.loads(stored_raw) if stored_raw else {}
 
@@ -163,7 +172,20 @@ def _locate(
                 for name in [] if legacy_env_first else legacy:
                     if (value := os.environ.get(name)) is not None:
                         located[field] = (value, "env", name)
+    _warn_if_keychain_mattered(provider, [field for field in fields if field not in located])
     return located
+
+
+def _warn_if_keychain_mattered(provider: str, missing: list[str]) -> None:
+    global _warned_missing
+    if missing and _keychain_problem is not None and not _warned_missing:
+        _warned_missing = True
+        log.warning(
+            "OS credential store unavailable (%s) and %s not set in the environment for '%s'",
+            _keychain_problem,
+            ", ".join(missing),
+            provider,
+        )
 
 
 def env_var_name(provider: str, field: str, namespace: str = NAMESPACE) -> str:

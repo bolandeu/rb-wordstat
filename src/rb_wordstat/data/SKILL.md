@@ -13,7 +13,7 @@ description: Частоты Яндекс.Wordstat (базовая, фразов�
 ## Установка (если `wordstat --version` не работает)
 
 ```bash
-uv tool install "git+https://github.com/bolandeu/wordstat.git"
+uv tool install "rb-wordstat @ git+https://github.com/bolandeu/wordstat.git@vX.Y.Z"
 ```
 
 Одинаково на macOS, Linux и Windows; обновление — `uv tool upgrade rb-wordstat`
@@ -27,7 +27,7 @@ uv tool install "git+https://github.com/bolandeu/wordstat.git"
 SSH-ключами работает и так:
 
 ```bash
-uv tool install "git+ssh://git@github.com/bolandeu/wordstat.git"
+uv tool install "rb-wordstat @ git+ssh://git@github.com/bolandeu/wordstat.git@vX.Y.Z"
 ```
 
 ## Правила
@@ -47,6 +47,14 @@ uv tool install "git+ssh://git@github.com/bolandeu/wordstat.git"
   провайдеров из `--provider`. В результате видно `from_cache` и
   `fetched_at`. `--force` — только если пользователь просит свежие данные.
   Журнал — `wordstat cache info|list|clear`.
+- **Данные** — в общей PostgreSQL, если задан `WORDSTAT_DATABASE_URL`
+  (иначе локальный SQLite). `DATABASE_UNAVAILABLE` (код 5) — сервер
+  недоступен, ничего никуда не записано; `DATABASE_NOT_MIGRATED` →
+  `wordstat db upgrade` (меняет общую базу — сначала спросить
+  пользователя); ревизия — `db status --json`. `db push --dry-run`, затем
+  `db push` — отправить локальные ответы в прод
+  (`WORDSTAT_PROD_DATABASE_URL`; уже имеющиеся пропускаются). Читать
+  данные wordstat из SQL — только через представления `wordstat_v1_*`.
 - **Частота 0 — не сбой**, а «запрос не ищут». Сбой провайдера всегда
   даёт код выхода 3 или 5, а не нули.
 - **Проект необязателен.** Без него работают настройки по умолчанию;

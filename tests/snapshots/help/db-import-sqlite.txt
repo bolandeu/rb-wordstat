@@ -1,0 +1,20 @@
+
+ Usage: wordstat db import-sqlite [OPTIONS] [path]
+
+ Copy a local SQLite database into the configured database, once.
+
+ For the move to the shared PostgreSQL: set the database URL, then run
+ this. Every target table must be empty; all rows go in one transaction.
+
+ Example: wordstat db import-sqlite --dry-run
+
+╭─ Аргументы ──────────────────────────────────────────────────────────────────────────────────────╮
+│   path      <path>  SQLite file to import (default: this tool's local database).                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Параметры ──────────────────────────────────────────────────────────────────────────────────────╮
+│ --json             Машиночитаемый вывод: JSON в stdout.                                          │
+│ --quiet            Не печатать ничего, кроме данных.                                             │
+│ --dry-run          Показать, что будет сделано, ничего не меняя.                                 │
+│ --help             Show this message and exit.                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

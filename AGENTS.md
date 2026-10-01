@@ -38,8 +38,8 @@ changed with no changelog fragment on the branch.
   `AuthRequired` / `ProviderError` — that is what `WordstatClient` switches
   to the next provider in the queue on, per (query, freq type) pair.
   `_api_error` / `_parse` are classmethods so journal entries parse without
-  credentials. The response journal (`core/cache.py`, SQLite `wordstat.db`,
-  every raw answer, read only with `--cache`) lives in `WordstatClient`
+  credentials. The response journal (`core/cache.py`, table `wordstat_responses`
+  in the tool's database, append-only, every raw answer, read only with `--cache`) lives in `WordstatClient`
   (`--provider a,b`, project `providers = [...]`, default `["xmlriver"]`).
   Tests inject `httpx.MockTransport` via the provider's `transport`
   argument. Never call `httpx` from `core/` or `commands/`.
@@ -68,6 +68,19 @@ changed with no changelog fragment on the branch.
   `--dry-run` (`output.is_dry_run`) and gate the actual action behind
   `output.require_confirmation`. Commands that only touch local project
   files (`init`, `config set`) don't need this.
+- Data goes through `core/db.py` (cli-generator `architecture.md` §12).
+  `WORDSTAT_DATABASE_URL` → the shared PostgreSQL, else local SQLite
+  (`WORDSTAT_DB_PATH` moves the file). Caches go there too; anything kept local
+  instead is listed here, with the reason.
+  Tables, views, indexes: `wordstat_*` only, declared in `core/tables.py`
+  and created by a hand-written migration in `migrations/versions/`.
+  Other tools read only the `wordstat_v1_*` views — a new shape is a `_v2_`
+  view plus a Service map entry. Cross-tool keys: `core/normalize.py`,
+  stored next to the original text. Every migration must keep working
+  with the previous release (expand/contract); the shared base is
+  migrated only by `wordstat db upgrade` from a release. Append-only
+  tables with a unique natural key can be marked `info={"push": ...}` for
+  `wordstat db push` (local SQLite → `WORDSTAT_PROD_DATABASE_URL`).
 
 ## Names
 

@@ -190,4 +190,4 @@ def render(payload: dict) -> None:
         detail = f" — {entry['message']}" if entry["message"] else ""
         expires = f", expires {entry['expires_at']}" if entry["expires_at"] else ""
         line = f"{entry['provider']}{optional}: {entry['status']} ({entry['source']}: {entry['source_ref']}){expires}{detail}"
-        output.human.echo(f"{mark} {escape(line)}")
+        output.human.echo_markup(f"{mark} {escape(line)}")

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import sqlite3
+import zlib
 from datetime import timedelta
 from pathlib import Path
 
 import pytest
+import sqlalchemy as sa
 
 from rb_wordstat import WordstatClient, WordstatParams
 from rb_wordstat.core import services
@@ -21,10 +23,10 @@ def put(journal: ResponseCache, query: str = "Купить  Диван", provide
                 data={"total": total, "query": query})  # fmt: skip
 
 
-def test_journal_put_latest_stats_entries_clear(isolated_cache: Path) -> None:
+def test_journal_put_latest_stats_entries_clear(_local_database: Path) -> None:
     journal = ResponseCache()
-    assert journal.path == isolated_cache == default_path()
     assert "пока пуст" in help_line()
+    assert journal.location == str(_local_database) and default_path() == _local_database
     assert journal.latest(provider="a", freq_type="broad", region="213", query="купить диван") is None
 
     put(journal, total=100)
@@ -59,6 +61,7 @@ def test_journal_put_latest_stats_entries_clear(isolated_cache: Path) -> None:
 
 def test_helpers() -> None:
     assert query_key("  Купить   ДИВАН ") == "купить диван"
+    assert query_key("Ёлка") == "елка"
     assert human_size(512) == "512 Б"
     assert human_size(2048) == "2 КБ"
     assert human_size(3 * 1024**3) == "3.0 ГБ"
@@ -113,7 +116,7 @@ def test_client_without_journal_and_broken_disk(monkeypatch: pytest.MonkeyPatch)
     assert no_journal.search_sync(WordstatParams(query="x"), use_cache=True)[0].from_cache is False
 
     def broken_put(**kwargs):
-        raise sqlite3.OperationalError("disk full")
+        raise sa.exc.OperationalError("INSERT", {}, Exception("disk full"))
 
     journal = ResponseCache()
     monkeypatch.setattr(journal, "put", broken_put)
@@ -161,7 +164,43 @@ def test_cache_commands() -> None:
     assert "Будет удалено: 0" in invoke("--dry-run", "cache", "clear", "--all").stdout
 
 
-def test_doctor_reports_cache(isolated_cache: Path) -> None:
+def test_doctor_reports_cache(_local_database: Path) -> None:
     _, payload = invoke_json("doctor")
     check = next(c for c in payload["checks"] if c["name"] == "cache")
-    assert check["ok"] and str(isolated_cache) in check["detail"]
+    assert check["ok"] and str(_local_database) in check["detail"]
+
+
+def test_legacy_journal_moves_into_wordstat_responses(_local_database: Path) -> None:
+    """Файл версий до 0.4 (таблица `responses` без Alembic) мигрирует на месте, даты — исходные."""
+    _local_database.parent.mkdir(parents=True)
+    legacy = sqlite3.connect(_local_database)
+    legacy.executescript(
+        "CREATE TABLE responses (id INTEGER PRIMARY KEY, fetched_at TEXT NOT NULL, provider TEXT NOT NULL,"
+        " freq_type TEXT NOT NULL, region TEXT NOT NULL, query TEXT NOT NULL, query_key TEXT NOT NULL,"
+        " total_value INTEGER NOT NULL, data BLOB NOT NULL);"
+        "CREATE INDEX responses_date ON responses (fetched_at);"
+    )
+    blob = zlib.compress(b'{"total": 5}')
+    legacy.executemany(
+        "INSERT INTO responses (fetched_at, provider, freq_type, region, query, query_key, total_value, data)"
+        " VALUES (?, ?, 'broad', ?, ?, ?, ?, ?)",
+        [
+            ("2026-09-24T14:58:19.327064+00:00", "xmlriver", "213", "Купить  Ёлку", "купить ёлку", 5, blob),
+            ("2026-09-25T10:00:00+03:00", "xmlstock", "225", "диван", "диван", 7, blob),
+        ],
+    )
+    legacy.commit()
+    legacy.close()
+
+    journal = ResponseCache()
+    rows = journal.entries()
+    assert [(r.fetched_at.isoformat(), r.provider, r.region, r.query, r.total_value) for r in rows] == [
+        ("2026-09-25T07:00:00+00:00", "xmlstock", 225, "диван", 7),
+        ("2026-09-24T14:58:19.327064+00:00", "xmlriver", 213, "Купить  Ёлку", 5),
+    ]
+    hit = journal.latest(provider="xmlriver", freq_type="broad", region=213, query="купить елку")
+    assert hit is not None and hit.data == {"total": 5}
+    assert "responses" not in sa.inspect(journal.engine).get_table_names()
+    with journal.engine.connect() as conn:
+        view = conn.execute(sa.text("SELECT phrase_key, region FROM wordstat_v1_responses ORDER BY fetched_at")).all()
+    assert [tuple(r) for r in view] == [("купить елку", 213), ("диван", 225)]

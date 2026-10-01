@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -168,6 +169,7 @@ def test_search_rejects_bad_params() -> None:
 
 def test_csv_modes(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     results = [result("диван", FreqType.broad, total=100), result("диван", FreqType.phrase, total=40)]
+    results[0] = results[0].model_copy(update={"fetched_at": datetime(2026, 9, 24, 14, 58, tzinfo=UTC)})
     assert services.csv_mode_for("auto", [FreqType.broad, FreqType.phrase]) == "freq"
     assert services.csv_mode_for("auto", [FreqType.broad]) == "keywords"
     assert services.csv_mode_for("keywords", [FreqType.broad, FreqType.phrase]) == "keywords"
@@ -175,16 +177,16 @@ def test_csv_modes(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     freq_csv = tmp_path / "freq.csv"
     services.save_results(results, freq_csv, csv_mode="freq")
     rows = list(csv.reader(freq_csv.open(encoding="utf-8")))
-    assert rows[0] == ["query", "freq_type", "freq_label", "operator", "total_value"]
-    assert rows[2] == ["диван", "phrase", "фразовая", '"диван"', "40"]
+    assert rows[0] == ["query", "freq_type", "freq_label", "operator", "total_value", "fetched_at"]
+    assert rows[2] == ["диван", "phrase", "фразовая", '"диван"', "40", ""]
 
     kw_csv = tmp_path / "kw.csv"
     services.save_results(results, kw_csv, csv_mode="keywords")
     rows = list(csv.reader(kw_csv.open(encoding="utf-8")))
     assert rows == [
-        ["source_query", "type", "keyword", "value"],
-        ["диван", "popular", "диван купить", "10"],
-        ["диван", "assoc", "ассоциация", "5"],
+        ["source_query", "type", "keyword", "value", "fetched_at"],
+        ["диван", "popular", "диван купить", "10", "2026-09-24T14:58:00+00:00"],
+        ["диван", "assoc", "ассоциация", "5", "2026-09-24T14:58:00+00:00"],
     ]
     assert "пустым" not in caplog.text
 
@@ -262,3 +264,14 @@ def test_search_without_credentials_is_exit_3(tmp_path: Path) -> None:
     assert code == 3
     assert payload["error"]["code"] == "AUTH_REQUIRED"
     assert "auth login" in payload["error"]["action"]
+
+
+def test_human_output_shows_when_the_data_was_fetched() -> None:
+    from rb_wordstat.commands.search import _when
+
+    fresh = result("диван", FreqType.broad, total=1)
+    assert _when(fresh) == ""
+    at = datetime(2026, 9, 24, 14, 58, tzinfo=UTC)
+    live = fresh.model_copy(update={"fetched_at": at})
+    assert _when(live) == at.astimezone().strftime("%d.%m.%Y %H:%M")
+    assert _when(live.model_copy(update={"from_cache": True})).endswith(", из журнала")

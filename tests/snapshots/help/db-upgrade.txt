@@ -1,0 +1,18 @@
+
+ Usage: wordstat db upgrade [OPTIONS]
+
+ Apply pending schema migrations to the database.
+
+ The shared PostgreSQL is never migrated implicitly: run this from the
+ released version after an upgrade that brings migrations. Concurrent runs
+ wait for each other. A local SQLite database is migrated on every open anyway.
+
+ Example: wordstat db upgrade --dry-run
+
+╭─ Параметры ──────────────────────────────────────────────────────────────────────────────────────╮
+│ --json             Машиночитаемый вывод: JSON в stdout.                                          │
+│ --quiet            Не печатать ничего, кроме данных.                                             │
+│ --dry-run          Показать, что будет сделано, ничего не меняя.                                 │
+│ --help             Show this message and exit.                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

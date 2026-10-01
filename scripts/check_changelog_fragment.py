@@ -22,7 +22,17 @@ BASE = "origin/main"
 # Changes that never need a changelog fragment (standard §3): they don't
 # change what users of the package get. Keep this list identical in
 # scripts/release.py and scripts/check_changelog_fragment.py (a test checks).
-NO_FRAGMENT_NEEDED = ("uv.lock", ".github/", "scripts/", "tests/", ".githooks/", ".claude/", "AGENTS.md", "CLAUDE.md")
+NO_FRAGMENT_NEEDED = (
+    "uv.lock",
+    ".github/",
+    "scripts/",
+    "tests/",
+    "docs/",
+    ".githooks/",
+    ".claude/",
+    "AGENTS.md",
+    "CLAUDE.md",
+)
 
 
 def needs_fragment(path: str) -> bool:

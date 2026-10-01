@@ -157,21 +157,26 @@ def save_results(results: list[WordstatResult], path: Path, *, csv_mode: str) ->
     with path.open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)
         if csv_mode == "freq":
-            writer.writerow(["query", "freq_type", "freq_label", "operator", "total_value"])
+            writer.writerow(["query", "freq_type", "freq_label", "operator", "total_value", "fetched_at"])
             for r in results:
                 writer.writerow(
-                    [r.query, r.freq_type.value, r.freq_type.label, r.freq_type.apply(r.query), r.total_value]
+                    [r.query, r.freq_type.value, r.freq_type.label, r.freq_type.apply(r.query), r.total_value, _iso(r)]
                 )
             return
         if all(r.freq_type != FreqType.broad for r in results):
             log.warning(
                 "CSV keywords строится по freq=broad, а его нет — файл будет пустым. Добавьте broad или --csv-mode freq."
             )
-        writer.writerow(["source_query", "type", "keyword", "value"])
+        writer.writerow(["source_query", "type", "keyword", "value", "fetched_at"])
         for r in results:
             if r.freq_type != FreqType.broad:
                 continue
             for entry in r.popular:
-                writer.writerow([r.query, "popular", entry.text, entry.value])
+                writer.writerow([r.query, "popular", entry.text, entry.value, _iso(r)])
             for entry in r.associations:
-                writer.writerow([r.query, "assoc", entry.text, entry.value])
+                writer.writerow([r.query, "assoc", entry.text, entry.value, _iso(r)])
+
+
+def _iso(result: WordstatResult) -> str:
+    """Когда провайдер отдал ответ (UTC, ISO 8601) — от какого числа данные."""
+    return result.fetched_at.isoformat() if result.fetched_at else ""
