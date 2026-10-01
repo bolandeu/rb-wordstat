@@ -10,6 +10,18 @@ one of added/changed/deprecated/removed/fixed/security), and
 
 <!-- towncrier release notes start -->
 
+## [0.4.0] - 2026-10-01
+
+### Added
+
+- Дата получения данных видна в обычном выводе `search` («данные от …, из журнала») и в CSV (колонка `fetched_at`).
+- Журнал ответов можно держать в общей PostgreSQL: `WORDSTAT_DATABASE_URL` (иначе локальный SQLite, как раньше). Новые команды `db status`, `db upgrade` (единственный способ обновить схему общей базы), `db import-sqlite` (перенос локального журнала) и `db push` (отправка локальных ответов в прод по `WORDSTAT_PROD_DATABASE_URL`, уже имеющиеся пропускаются). Другим инструментам — представление `wordstat_v1_responses`.
+
+### Changed
+
+- Журнал переехал в таблицу `wordstat_responses`: старая `responses` переносится при первом запуске с исходными датами. Ключ запроса теперь не различает ё и е. В `cache list --json` поле `region` — число, а не строка; `cache info` для PostgreSQL показывает адрес базы вместо пути.
+
+
 ## [0.3.1] - 2026-09-28
 
 ### Changed
