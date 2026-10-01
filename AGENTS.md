@@ -116,13 +116,13 @@ Logging is stdlib `logging` (logger `rb_wordstat`), never `print`.
   without one.
 - **Release** from a clean, up-to-date `main`:
   `uv run scripts/release.py patch|minor|major` — gate, towncrier build,
-  commit `Release vX.Y.Z`, annotated tag. It prints the push command;
-  pushing needs the user's confirmation.
+  commit `Release vX.Y.Z`, annotated tag. It never pushes, and neither do
+  you: hand the release to the root agent (below).
 - **Every user-visible change ships as a release.** Servers, other tools
   and the Mac install only from tags, never from `main`, so a merged change
   without a release is invisible to them. A change that needs a fragment is
-  done only after the release: merge to `main`, run `release.py`, ask the
-  user to push with `--follow-tags`, and name the new tag in the report.
+  done only after the release: merge to `main`, run `release.py`, hand it
+  to the root agent for the push, and name the new tag in the report.
   Maintenance-only commits (no fragment) wait for the next release. Don't
   leave a fragment unreleased on `main` without naming the reason.
 - **SemVer is a promise about the CLI surface.** Removing/renaming/changing
@@ -166,6 +166,15 @@ This tool is one service among many; the root `~/Work/tools/` agent
 deploys it, keeps its credentials (Doppler) and backs up its data (S3).
 Full rules: `~/Work/tools/docs/standard-release.md` §13.
 
+- **Push and questions go through the root agent**, never straight to the
+  user in this window. Release or branch ready → `herdr agent prompt
+  tools-root "<repo, branch, tags, what's inside, gate result>"`; it asks
+  the user and, after their yes, runs `git push --follow-tags` itself and
+  tells you. Don't push yourself; force-push and `commit --amend` never. A
+  question or decision for the user → the same channel, briefly: the
+  question, the options, your recommendation; meanwhile do whatever doesn't
+  depend on the answer.
+
 - **Report to the root agent** (in the report to the user, next to the
   release tag): a new or renamed env var / credential, a new local database
   or changed data path, a new or dropped dependency on another tool, a
@@ -175,6 +184,7 @@ Full rules: `~/Work/tools/docs/standard-release.md` §13.
 - **Headless Linux servers**: env vars first, keychain optional (a missing
   keychain is not an error when the env var is set); reuse existing env var
   names; no prompts without a TTY; no Mac-only paths.
-- **Local data** lives in `platformdirs.user_data_dir("<tool>")`, never in
-  the repo; all state in the database file, migrations run by the tool; the
-  tool never uploads or syncs its data itself.
+- **Data** lives in the shared PostgreSQL (`WORDSTAT_DATABASE_URL`)
+  or the local SQLite in `platformdirs.user_data_dir("<tool>")`, never in
+  the repo; it moves between them only through `db import-sqlite` and
+  `db push` (cli-generator `architecture.md` §12).
