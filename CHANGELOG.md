@@ -10,6 +10,13 @@ one of added/changed/deprecated/removed/fixed/security), and
 
 <!-- towncrier release notes start -->
 
+## [0.5.0] - 2026-10-02
+
+### Added
+
+- Шаблон cli-generator v1.5.1: `wordstat describe --json` — контракт CLI в формате OpenCLI (команды, опции, коды выхода, переменные окружения, таблицы и представление `wordstat_v1_responses`).
+
+
 ## [0.4.0] - 2026-10-01
 
 ### Added
