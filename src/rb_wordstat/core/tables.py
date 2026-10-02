@@ -5,6 +5,15 @@ tool's tables (and Directus') in one `public` schema. Change a table here *and* 
 a migration by hand (copy the example in `migrations/versions/`) — tests/test_db.py
 fails when the migrated schema and this metadata disagree.
 
+Every table has a single-column PRIMARY KEY — Directus can't show or edit a
+table without one and doesn't support a composite one: a surrogate `id`, with the
+natural key as a UNIQUE constraint (tests/test_db.py checks this metadata and the
+migrated database).
+
+Every table says what its rows are, `info={"kind": "data"}` or `"cache"` (tests/test_db.py
+fails without it): `data` is the tool's result and lost when deleted; `cache` is a copy
+of something it can fetch again. `describe --json` publishes it (x-rb-data).
+
 `info={"push": {...}}` marks an append-only table for `<cli> db push` (local SQLite →
 production PostgreSQL): rows are inserted without their ids and skipped when one
 with the same natural key exists, so the table needs a unique constraint on that key
@@ -51,5 +60,26 @@ responses = sa.Table(
         "provider", "freq_type", "region", "phrase_key", "fetched_at", name="wordstat_responses_key_uq"
     ),
     sa.Index(None, "fetched_at"),
-    info={"push": {"since": "fetched_at"}},
+    info={"kind": "cache", "push": {"since": "fetched_at"}},
+)
+
+# The `<tool>_v1_*` views other tools, Directus and the platform read instead of the
+# tables — the tool's data contract, published by `describe --json` (x-rb-data.views).
+# Declared here for that, created by a migration (`CREATE VIEW`); tests/test_db.py
+# fails when a view below is missing from the migrated database or its columns differ.
+# Columns never change: a different shape is a new `_v2_` view next to the old one.
+# Kept out of `metadata`, which mirrors the tables only.
+views = sa.MetaData()
+
+v1_responses = sa.Table(
+    f"{PREFIX}v1_responses",
+    views,
+    sa.Column("fetched_at", sa.DateTime(timezone=True), comment="When the provider answered, UTC"),
+    sa.Column("provider", sa.Text, comment="The provider that answered (xmlriver, xmlstock)"),
+    sa.Column("freq_type", sa.Text, comment="Frequency type: broad, phrase, exact or exact_ord"),
+    sa.Column("region", sa.Integer, comment="Yandex region id (lr)"),
+    sa.Column("phrase", sa.Text, comment="The query as the user typed it"),
+    sa.Column("phrase_key", sa.Text, comment="The normalized phrase: the key to join on"),
+    sa.Column("total_value", sa.BigInteger, comment="Wordstat frequency for the phrase"),
+    comment="Every Wordstat answer, append-only: a repeated query adds a row, take the newest by fetched_at",
 )

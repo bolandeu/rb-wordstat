@@ -8,7 +8,7 @@ import typer
 from typer import rich_utils
 
 from . import output
-from .commands import auth, db, doctor, init, search, skill, status
+from .commands import auth, db, describe, doctor, init, search, skill, status
 from .commands import cache as cache_cmd
 from .commands import config as config_cmd
 from .core.cache import help_line as cache_help_line
@@ -44,6 +44,7 @@ app.command(name="init")(init.init)
 app.command(name="status")(status.status)
 app.command(name="doctor")(doctor.doctor)
 app.command(name="search")(search.search)
+app.command(name="describe")(describe.describe)
 
 
 def _version_callback(value: bool) -> None:

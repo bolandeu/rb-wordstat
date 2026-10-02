@@ -53,7 +53,9 @@ uv tool install "rb-wordstat @ git+ssh://git@github.com/bolandeu/wordstat.git@vX
   `wordstat db upgrade` (меняет общую базу — сначала спросить
   пользователя); ревизия — `db status --json`. `db push --dry-run`, затем
   `db push` — отправить локальные ответы в прод
-  (`WORDSTAT_PROD_DATABASE_URL`; уже имеющиеся пропускаются). Читать
+  (`WORDSTAT_PROD_DATABASE_URL`; уже имеющиеся пропускаются). Запускает
+  только корневой агент tools; любой другой агент присылает ему точную
+  команду. Читать
   данные wordstat из SQL — только через представления `wordstat_v1_*`.
 - **Частота 0 — не сбой**, а «запрос не ищут». Сбой провайдера всегда
   даёт код выхода 3 или 5, а не нули.
@@ -76,6 +78,9 @@ uv tool install "rb-wordstat @ git+ssh://git@github.com/bolandeu/wordstat.git@vX
   `--confirm --non-interactive`.
 - **Сначала `wordstat doctor --json`**, если что-то не так: он проверяет
   проект, настройки, совместимость версий и доступы.
+- **`wordstat describe --json`** — весь CLI одним машиночитаемым документом
+  OpenCLI (команды, опции, коды выхода, переменные окружения, данные):
+  документ как есть, без обёртки `{"ok": ...}`.
 
 ## Ошибки
 

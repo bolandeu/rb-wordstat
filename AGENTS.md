@@ -27,6 +27,17 @@ via `.claude/settings.json`). The pre-commit hook **blocks** a commit where
 a command's logic changed but its docstring didn't, and warns when `src/`
 changed with no changelog fragment on the branch.
 
+**A command that may take more than a couple of minutes runs detached —
+only through `scripts/run_detached.sh <label> <command...>`, then poll
+`scripts/runs_status.sh <label>` (`--json` for the exit code and the
+output tails).** Any command: the gate, `scripts/pg_test.sh`, a long
+`wordstat` run. Run in the agent's own shell, it dies with the turn
+— an interrupt (an incoming herdr message is one) kills it and the work
+is redone. The detached run has its own session; its pid, output
+(`<label>.log`), errors (`<label>.stderr`) and exit code (`<label>.exit`)
+are in the tool's state dir (`runs/`); `python3 scripts/detach.py stop
+<label>` ends it.
+
 ## Architecture (do not violate)
 
 - `commands/` — argument parsing only. No business logic here.
@@ -75,10 +86,17 @@ changed with no changelog fragment on the branch.
   Tables, views, indexes: `wordstat_*` only, declared in `core/tables.py`
   and created by a hand-written migration in `migrations/versions/`.
   Other tools read only the `wordstat_v1_*` views — a new shape is a `_v2_`
-  view plus a Service map entry. Cross-tool keys: `core/normalize.py`,
+  view plus a Service map entry. Every view is declared in `tables.py`
+  `views` (typed columns with `comment=`) — `wordstat describe --json`
+  publishes it as the data contract; every table has
+  `info={"kind": "data" | "cache"}`. Cross-tool keys: `core/normalize.py`,
   stored next to the original text. Every migration must keep working
   with the previous release (expand/contract); the shared base is
-  migrated only by `wordstat db upgrade` from a release. Append-only
+  migrated only by `wordstat db upgrade` from a release. Every table
+  has a single-column PRIMARY KEY (a surrogate `id`; Directus supports
+  no other kind) and its natural key as UNIQUE. PostgreSQL tests: only via
+  `scripts/pg_test.sh` (own container, Docker-assigned port, removed after)
+  — never a fixed port or another tool's server. Append-only
   tables with a unique natural key can be marked `info={"push": ...}` for
   `wordstat db push` (local SQLite → `WORDSTAT_PROD_DATABASE_URL`).
 
@@ -151,7 +169,9 @@ docstring in the same commit**:
   `Example: {cli} <command> ...` line (`output.guard` turns `{cli}` into
   `wordstat`); every `typer.Option`/`Argument` has `help=`;
 - then `uv run pytest --snapshot-update` and read the diff in
-  `tests/snapshots/help/` — that diff is the user-visible change.
+  `tests/snapshots/help/` and `tests/snapshots/describe.json` — that diff
+  is the user-visible change (`describe --json` is the machine-readable
+  contract the tools catalog and the platform read).
 
 Enforced: Claude Code hooks (`.claude/settings.json`: PostToolUse after
 editing a command file, Stop before ending the turn), the pre-commit hook,
@@ -174,6 +194,11 @@ Full rules: `~/Work/tools/docs/standard-release.md` §13.
   question or decision for the user → the same channel, briefly: the
   question, the options, your recommendation; meanwhile do whatever doesn't
   depend on the answer.
+- **Only the root agent goes to production.** Run nothing against it:
+  no `db push` (not even `--dry-run`), no reads through
+  `*_PROD_DATABASE_URL`, no ssh to the server. Need a check on production →
+  send the root agent the exact command; it runs it and returns the output.
+  A local throwaway database (`scripts/pg_test.sh`) is yours.
 
 - **Report to the root agent** (in the report to the user, next to the
   release tag): a new or renamed env var / credential, a new local database

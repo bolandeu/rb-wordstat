@@ -42,6 +42,12 @@ _PACKAGE_NAME = __name__.split(".")[0]
 ENV_VAR = f"{TOOL.upper()}_DATABASE_URL"
 PROD_ENV_VAR = f"{TOOL.upper()}_PROD_DATABASE_URL"  # `db push` target: production, from a dev machine
 PATH_ENV_VAR = f"{TOOL.upper()}_DB_PATH"  # the local SQLite file elsewhere (a second database, an existing file)
+# What each one is for — `describe --json` lists them (x-rb-env).
+ENV_VARS = {
+    ENV_VAR: "Shared PostgreSQL URL; unset → the local SQLite file",
+    PROD_ENV_VAR: "Production PostgreSQL URL, the target of `db push` from a dev machine",
+    PATH_ENV_VAR: "The local SQLite file, instead of the one in the user data dir",
+}
 VERSION_TABLE = f"alembic_version_{TOOL}"
 CONNECT_TIMEOUT_S = 5
 

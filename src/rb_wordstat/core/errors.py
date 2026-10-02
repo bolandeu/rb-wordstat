@@ -8,6 +8,19 @@ from .version import cli_name
 _CLI = cli_name()
 _DIST = DIST_NAME
 
+# Every exit code a generated CLI uses and what it means — the same table in
+# conventions.md, and `describe --json`'s `exitCodes`. tests/test_describe.py
+# fails when a CliError below uses a code that isn't listed here.
+EXIT_CODES: dict[int, str] = {
+    0: "Success",
+    1: "General error (incl. UNEXPECTED and ABORTED)",
+    2: "Invalid arguments",
+    3: "Authentication error",
+    4: "Project not initialized",
+    5: "Provider error (external service: network, timeout, 5xx, 429, bad body)",
+    6: "CLI too old for this project or database",
+}
+
 
 class CliError(Exception):
     """Base error for all expected, user-facing CLI failures.

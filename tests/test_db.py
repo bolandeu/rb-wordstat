@@ -18,8 +18,8 @@ from rb_wordstat.core.normalize import norm_phrase
 
 runner = CliRunner()
 
-# The real PostgreSQL contract (advisory lock, sequences, psycopg) runs only when
-# a throwaway server is given: TEST_DATABASE_URL=postgresql://postgres:pw@localhost:5432/postgres
+# The real PostgreSQL contract (advisory lock, sequences, psycopg) runs only against
+# the throwaway server scripts/pg_test.sh starts and names in TEST_DATABASE_URL.
 PG_URL = os.environ.get("TEST_DATABASE_URL")
 
 
@@ -60,6 +60,42 @@ def test_sqlite_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     assert db.sqlite_path() == tmp_path / "x.sqlite"
     monkeypatch.delenv(db.PATH_ENV_VAR)
     assert db.sqlite_path().name == f"{db.PREFIX.removesuffix('_')}.db"
+
+
+def test_every_table_has_a_single_column_primary_key() -> None:
+    """Directus can't show or edit a table without one, and doesn't support a composite one.
+
+    A surrogate `id` is the key; the natural key is a UNIQUE constraint. Checked on
+    the declared tables and the migrated database alike.
+    """
+    for table in tables.metadata.sorted_tables:
+        assert len(table.primary_key.columns) == 1, f"{table.name}: PRIMARY KEY must be one column"
+    inspector = sa.inspect(db.open_db())
+    for name in inspector.get_table_names():
+        columns = inspector.get_pk_constraint(name)["constrained_columns"]
+        assert len(columns) == 1, f"{name}: PRIMARY KEY must be one column, is {columns}"
+
+
+def test_every_table_says_whether_it_is_data_or_cache() -> None:
+    for table in tables.metadata.sorted_tables:
+        assert table.info.get("kind") in ("data", "cache"), (
+            f'{table.name}: info={{"kind": "data" | "cache"}} is required'
+        )
+
+
+def test_declared_views_exist_with_their_columns() -> None:
+    """Every view in tables.views is created by the migrations, with exactly the declared columns."""
+    _assert_views_match(db.open_db())
+
+
+def _assert_views_match(engine: sa.Engine) -> None:
+    inspector = sa.inspect(engine)
+    existing = set(inspector.get_view_names())
+    for view in tables.views.sorted_tables:
+        assert view.name.startswith(f"{db.PREFIX}v"), f"{view.name}: a view's name is <tool>_v<N>_<name>"
+        assert view.name in existing, f"{view.name} is declared in tables.views but no migration creates it"
+        columns = [column["name"] for column in inspector.get_columns(view.name)]
+        assert columns == [column.name for column in view.columns], f"{view.name}: columns differ from tables.views"
 
 
 def test_tables_match_the_migrations() -> None:
@@ -270,6 +306,8 @@ def test_push_table_rules(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.skipif(not PG_URL, reason="TEST_DATABASE_URL not set")
 def test_postgres_round_trip(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     assert PG_URL
+    # It drops this tool's tables: never anything but a throwaway local server.
+    assert sa.make_url(PG_URL).host in ("127.0.0.1", "localhost"), "TEST_DATABASE_URL must be scripts/pg_test.sh's"
     monkeypatch.setenv(db.ENV_VAR, PG_URL)
     engine = db.open_db(check=False)
     with engine.begin() as conn:  # a clean slate: only this tool's objects
@@ -280,6 +318,7 @@ def test_postgres_round_trip(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
         db.open_db()
     assert db.upgrade(engine).up_to_date
     db.check_schema(engine)
+    _assert_views_match(engine)
 
     source = db.sqlite_engine(tmp_path / "old.db")
     db.upgrade(source)
