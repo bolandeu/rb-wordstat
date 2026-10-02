@@ -135,7 +135,7 @@ Logging is stdlib `logging` (logger `rb_wordstat`), never `print`.
 - **Release** from a clean, up-to-date `main`:
   `uv run scripts/release.py patch|minor|major` — gate, towncrier build,
   commit `Release vX.Y.Z`, annotated tag. It never pushes, and neither do
-  you: hand the release to the root agent (below).
+  you: report the release to the root agent (below).
 - **Every user-visible change ships as a release.** Servers, other tools
   and the Mac install only from tags, never from `main`, so a merged change
   without a release is invisible to them. A change that needs a fragment is
@@ -186,12 +186,14 @@ This tool is one service among many; the root `~/Work/tools/` agent
 deploys it, keeps its credentials (Doppler) and backs up its data (S3).
 Full rules: `~/Work/tools/docs/standard-release.md` §13.
 
-- **Push and questions go through the root agent**, never straight to the
-  user in this window. Release or branch ready → `herdr agent prompt
-  tools "<repo, branch, tags, what's inside, gate result>"`; it asks
-  the user and, after their yes, runs `git push --follow-tags` itself and
-  tells you. Don't push yourself; force-push and `commit --amend` never. A
-  question or decision for the user → the same channel, briefly: the
+- **Nobody here pushes; releases and questions go through the root agent**,
+  never straight to the user in this window. Release or branch ready →
+  `~/Work/tools/scripts/agent_say.sh tools "<repo, branch, tags, what's
+  inside, release.py --check result>"`, one message per tag. The root
+  agent checks it and queues it for dev; dev shows the user and pushes
+  after their yes; then the root agent installs it on the Mac and the
+  homeserver. Don't push yourself; force-push and `commit --amend` never.
+  A question or decision for the user → the same channel, briefly: the
   question, the options, your recommendation; meanwhile do whatever doesn't
   depend on the answer.
 - **Only the root agent goes to production.** Run nothing against it:
