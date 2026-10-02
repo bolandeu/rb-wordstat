@@ -482,7 +482,7 @@ def main() -> None:
     run("git", "add", "--all", changelog_file(), *([str(FRAGMENTS)] if FRAGMENTS.exists() else []))
     run("git", "commit", "-m", release_commit_message(version))
     run("git", "tag", "-a", tag, "-m", tag)
-    print(f"Released {tag} locally. Hand it to the root agent (herdr agent prompt tools-root ...) to push it.")
+    print(f"Released {tag} locally. Hand it to the root agent (herdr agent prompt tools ...) to push it.")
     print(f"Then install it anywhere with: {install_command(tag)}")
 
 

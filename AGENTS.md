@@ -188,7 +188,7 @@ Full rules: `~/Work/tools/docs/standard-release.md` §13.
 
 - **Push and questions go through the root agent**, never straight to the
   user in this window. Release or branch ready → `herdr agent prompt
-  tools-root "<repo, branch, tags, what's inside, gate result>"`; it asks
+  tools "<repo, branch, tags, what's inside, gate result>"`; it asks
   the user and, after their yes, runs `git push --follow-tags` itself and
   tells you. Don't push yourself; force-push and `commit --amend` never. A
   question or decision for the user → the same channel, briefly: the
