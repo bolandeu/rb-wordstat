@@ -199,6 +199,12 @@ Full rules: `~/Work/tools/docs/standard-release.md` §13.
   `*_PROD_DATABASE_URL`, no ssh to the server. Need a check on production →
   send the root agent the exact command; it runs it and returns the output.
   A local throwaway database (`scripts/pg_test.sh`) is yours.
+- **Nothing around the root agent.** Tasks come from it. Don't give
+  instructions to other agents (other tools, sysadmin, dev, windmill, ...)
+  and change nothing outside this repository. A bug or a request for
+  another tool or the infrastructure → a message to the root agent
+  (`~/Work/tools/scripts/agent_say.sh tools "..."`); it decides and passes
+  it on.
 
 - **Report to the root agent** (in the report to the user, next to the
   release tag): a new or renamed env var / credential, a new local database

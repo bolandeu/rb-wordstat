@@ -21,9 +21,12 @@ import enum
 import importlib
 import inspect
 import json
+import os
 from dataclasses import asdict
 from pathlib import PurePath
 from typing import Any
+
+import platformdirs
 
 from .._distribution import DIST_NAME, TEMPLATE_VERSION, TOOL
 from . import data_files, deps
@@ -224,10 +227,29 @@ def data() -> dict:
         files.insert(
             0,
             {
-                "path": f"{TOOL}.db",
+                "path": _sqlite_file(),
                 "kind": "data",
                 "description": "The local SQLite database, used when the shared database URL is unset",
             },
         )
     out["user_data_dir"] = {"appname": TOOL, "files": files}
     return out
+
+
+def _sqlite_file() -> str:
+    """Where `db.sqlite_path()` puts the local database by default: relative to the user data dir.
+
+    A tool may name the file its own way (serp: `serp.sqlite`), so it is asked, with
+    `<TOOL>_DB_PATH` hidden — the contract is the default, not this machine's override.
+    """
+    db = importlib.import_module(f"{_PACKAGE_NAME}.core.db")
+    override = os.environ.pop(db.PATH_ENV_VAR, None)
+    try:
+        path = db.sqlite_path()
+    finally:
+        if override is not None:
+            os.environ[db.PATH_ENV_VAR] = override
+    try:
+        return path.relative_to(platformdirs.user_data_path(TOOL)).as_posix()
+    except ValueError:  # the tool keeps it outside the data dir
+        return path.as_posix()

@@ -13,18 +13,20 @@ from __future__ import annotations
 
 import enum
 import json
+import os
 import re
 from collections.abc import Iterator
 from pathlib import Path
 
 import jsonschema
+import platformdirs
 import pytest
 import typer
 from syrupy.extensions.single_file import SingleFileSnapshotExtension, WriteMode
 from typer.testing import CliRunner
 
 from rb_wordstat.cli import app
-from rb_wordstat.core import errors, opencli
+from rb_wordstat.core import db, errors, opencli
 
 CLI = "wordstat"
 SCHEMA = json.loads((Path(__file__).parent / "data" / "opencli.schema.json").read_text())
@@ -59,6 +61,13 @@ def _registered(group: typer.Typer, prefix: tuple[str, ...] = ()) -> Iterator[tu
 
 
 COMMANDS = dict(_walk(DOCUMENT["command"]))
+_SQLITE_PATH = db.sqlite_path  # before conftest points it at a temporary file
+
+
+@pytest.fixture(autouse=True)
+def _default_sqlite_path(_local_database: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """describe lists the local database where the tool keeps it, not where a test does."""
+    monkeypatch.setattr(db, "sqlite_path", _SQLITE_PATH)
 
 
 def _meta(entry: dict) -> dict:
@@ -128,6 +137,16 @@ def test_describe_snapshot(snapshot) -> None:
             item["value"] = "<template-version>"
     rendered = json.dumps(document, ensure_ascii=False, indent=2) + "\n"
     assert rendered == snapshot(extension_class=DescribeSnapshot)
+
+
+def test_database_file_is_where_sqlite_path_puts_it(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A tool's own file name counts (serp: serp.sqlite); a <TOOL>_DB_PATH override doesn't."""
+    data_dir = platformdirs.user_data_path(db.PREFIX.removesuffix("_"))
+    monkeypatch.setattr(db, "sqlite_path", lambda: Path(os.environ.get(db.PATH_ENV_VAR) or data_dir / "own.sqlite"))
+    monkeypatch.setenv(db.PATH_ENV_VAR, str(tmp_path / "elsewhere.db"))
+    files = _meta(opencli.document(typer.main.get_command(app))["command"])["x-rb-data"]["user_data_dir"]["files"]
+    assert files[0]["path"] == "own.sqlite"
+    assert os.environ[db.PATH_ENV_VAR] == str(tmp_path / "elsewhere.db")
 
 
 class Color(enum.Enum):
