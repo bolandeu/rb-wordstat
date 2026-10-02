@@ -13,3 +13,5 @@ build/
 dist/
 htmlcov/
 *.textClipping
+# mutmut's working copy and results (uv run --group mutation mutmut run)
+mutants/

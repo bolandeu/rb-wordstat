@@ -50,6 +50,10 @@ packages = ["src/rb_wordstat"]
 "pyproject.toml" = "rb_wordstat/_pyproject.toml"
 
 [dependency-groups]
+# Mutation testing, run now and then and before big releases — not in the gate:
+# `uv run --group mutation mutmut run`, then `mutmut results` / `mutmut browse`.
+# Needs fork(): macOS/Linux (WSL on Windows). Settings: [tool.mutmut] below.
+mutation = ["mutmut>=3.3"]
 dev = [
     "jsonschema>=4.23",
     "pytest>=8.0",
@@ -125,11 +129,19 @@ commands = ["src/rb_wordstat/commands/*.py"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# Only tests/: mutmut leaves a copy of the tree in mutants/.
+testpaths = ["tests"]
 addopts = "--cov --cov-report=term-missing:skip-covered"
 # tests/test_help.py keeps help snapshots at tests/snapshots/help/<command>.txt
 # (standard §7), not in syrupy's own `__snapshots__/<test file>/` layout, so
 # syrupy warns it "can not relate" each file to its test. It can — by name.
 filterwarnings = ["ignore:(?s).*Can not relate snapshot:UserWarning"]
+
+[tool.mutmut]
+source_paths = ["src/rb_wordstat"]
+also_copy = ["scripts/", "pyproject.toml"]  # tests read them (test_scripts.py, the distribution checks)
+pytest_add_cli_args = ["--no-cov"]  # fail_under would kill every mutant
+# only_mutate = ["*/core/normalize.py"]  # one module at a time on a big tool
 
 [tool.coverage.run]
 source = ["src"]

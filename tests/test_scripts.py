@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import re
+import subprocess
 from pathlib import Path
 from types import ModuleType
 
@@ -152,3 +153,82 @@ def test_external_registry_must_match_code(tmp_path: Path, monkeypatch: pytest.M
     registry["external"][1]["why"] = ""
     with pytest.raises(release.StepFailed, match="needs `name` and `why`"):
         release.check_external_deps()
+
+
+OLD_TESTS = """
+LIMIT = 3
+
+
+def helper():
+    return 1
+
+
+def test_a():
+    assert helper() == 1
+
+
+def test_b():
+    assert True
+
+
+class TestGroup:
+    def test_c(self):
+        assert LIMIT
+"""
+
+NEW_TESTS = """
+LIMIT = 4
+
+
+def test_b():
+    assert True
+
+
+def test_a():
+    assert helper() == 2
+
+
+class TestGroup:
+    def test_c(self):
+        assert LIMIT
+
+
+def test_new():
+    assert True
+"""
+
+
+def test_existing_tests_that_changed() -> None:
+    """Changed or removed tests are listed; moved, untouched and new ones aren't."""
+    assert release.changed_existing_tests("tests/t.py", OLD_TESTS, NEW_TESTS) == [
+        "tests/t.py: module-level code changed",
+        "tests/t.py::helper removed",
+        "tests/t.py::test_a changed",
+    ]
+    assert release.changed_existing_tests("tests/t.py", OLD_TESTS, None) == ["tests/t.py removed"]
+    assert release.changed_existing_tests("tests/t.py", OLD_TESTS, OLD_TESTS) == []
+    assert release.changed_existing_tests("tests/t.py", "def broken(:\n", NEW_TESTS) == ["tests/t.py changed"]
+
+
+def test_existing_tests_step_reports_against_the_last_tag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)  # noqa: S603, S607
+
+    (tmp_path / "tests" / "snapshots").mkdir(parents=True)
+    (tmp_path / "tests" / "test_x.py").write_text(OLD_TESTS)
+    (tmp_path / "tests" / "snapshots" / "help.txt").write_text("old\n")
+    git("init", "-q", "-b", "main")
+    git("add", "-A")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "i")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "tag", "-a", "v0.1.0", "-m", "v0.1.0")
+    monkeypatch.setattr(release, "ROOT", tmp_path)
+    assert release.check_existing_tests() == "none changed since v0.1.0"
+
+    (tmp_path / "tests" / "test_x.py").write_text(NEW_TESTS)
+    (tmp_path / "tests" / "snapshots" / "help.txt").write_text("new\n")
+    (tmp_path / "tests" / "test_added.py").write_text("def test_z():\n    pass\n")
+    detail = release.check_existing_tests()
+    assert detail.startswith("4 changed since v0.1.0")
+    assert "tests/test_x.py::test_a changed" in detail
+    assert "tests/snapshots/help.txt changed" in detail
+    assert "test_added" not in detail

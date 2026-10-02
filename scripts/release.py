@@ -12,6 +12,10 @@ step's name and output, then `release: code failed` (exit 1) or, when only
 the vulnerability audit failed, `release: audit failed` (exit 3):
 
     uv lock --check · ruff check · ruff format --check · ty check · pytest ·
+    existing tests (never fails: lists every test that existed at the last tag
+    and has since changed or gone — a changed or removed test function, changed
+    module-level code of a test file, a changed snapshot or data file; each goes
+    into the release report with its reason, `tools/dev` reject it without one) ·
     external dependencies (every program src/ runs is declared in
     [[tool.rb.external]] and vice versa) ·
     changelog fragment (at least one in changelog.d/ when anything user-visible
@@ -283,6 +287,66 @@ def check_fragment() -> str:
     )
 
 
+def _top_level(source: str) -> tuple[dict[str, str], list[str]]:
+    """A test module's top-level functions and classes by name, and its other statements (imports aside)."""
+    defs: dict[str, str] = {}
+    rest: list[str] = []
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            defs[node.name] = ast.dump(node)  # no line numbers: a moved test is not a changed one
+        elif not isinstance(node, ast.Import | ast.ImportFrom):
+            rest.append(ast.dump(node))
+    return defs, rest
+
+
+def changed_existing_tests(path: str, old: str, new: str | None) -> list[str]:
+    """What of `path` as it was (`old`) is changed or gone in `new` (None: the file is deleted). New tests don't count."""
+    if new is None:
+        return [f"{path} removed"]
+    if old == new:
+        return []
+    if not path.endswith(".py"):  # a snapshot, test data: the file as a whole
+        return [f"{path} changed"]
+    try:
+        old_defs, old_rest = _top_level(old)
+        new_defs, new_rest = _top_level(new)
+    except SyntaxError:
+        return [f"{path} changed"]
+    found = [f"{path}: module-level code changed"] if any(stmt not in new_rest for stmt in old_rest) else []
+    for name in sorted(old_defs):
+        if name not in new_defs:
+            found.append(f"{path}::{name} removed")
+        elif new_defs[name] != old_defs[name]:
+            found.append(f"{path}::{name} changed")
+    return found
+
+
+def check_existing_tests() -> str:
+    """Tests the last release had that are changed or gone now: a test is not edited to fit the code.
+
+    Never fails — a requirement can change. The list goes into the release
+    report, each entry with its reason (tools/dev docs/testing.md, "TDD").
+    """
+    versions = tags()
+    if not versions:
+        return "no release tag yet"
+    last = "v{}.{}.{}".format(*versions[-1])
+    found: list[str] = []
+    for path in _changed_since(last):
+        if not path.startswith("tests/"):
+            continue
+        old = subprocess.run(["git", "show", f"{last}:{path}"], cwd=ROOT, capture_output=True, check=False)
+        if old.returncode:  # added since the tag
+            continue
+        current = ROOT / path
+        new = current.read_text(errors="replace") if current.is_file() else None
+        found += changed_existing_tests(path, old.stdout.decode(errors="replace"), new)
+    if not found:
+        return f"none changed since {last}"
+    listed = "\n  ".join(found)
+    return f"{len(found)} changed since {last} — put each in the release report with its reason:\n  {listed}"
+
+
 def check_vulnerabilities() -> str:
     scanner = shutil.which("osv-scanner")
     if scanner is None:
@@ -385,6 +449,7 @@ def check_installed_wheel(version: str | None) -> str:
 def run_gate(version: str | None) -> None:
     steps: list[tuple[str, Callable[[], str]]] = [
         *((name, lambda argv=argv: run_command(argv)) for name, argv in COMMANDS),
+        ("existing tests", check_existing_tests),
         ("external dependencies", check_external_deps),
         ("changelog fragment", check_fragment),
         ("build + install wheel", lambda: check_installed_wheel(version)),
@@ -485,7 +550,9 @@ def main() -> None:
     run("git", "tag", "-a", tag, "-m", tag)
     print(
         f"Released {tag} locally. Report it to tools: agent_say.sh tools "
-        "(repo, branch, tags, what is inside, release.py --check). dev pushes after the user's yes."
+        "(repo, branch, tags, what is inside, release.py --check). dev pushes after the user's yes.\n"
+        "TDD in the report: the failing (red) run of the new tests, committed before the code; "
+        "every entry of 'existing tests' above with its reason."
     )
     print(f"Then install it anywhere with: {install_command(tag)}")
 
