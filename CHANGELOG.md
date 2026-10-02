@@ -10,6 +10,13 @@ one of added/changed/deprecated/removed/fixed/security), and
 
 <!-- towncrier release notes start -->
 
+## [0.5.2] - 2026-10-02
+
+### Changed
+
+- Шаблон cli-generator v1.5.5: порядок релиза — никто из агентов не пушит, готовность сообщается tools, пушит dev после согласия пользователя.
+
+
 ## [0.5.1] - 2026-10-02
 
 ### Changed
