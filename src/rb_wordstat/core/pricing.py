@@ -1,9 +1,15 @@
 """Стоимость платных запросов: цена за запрос по провайдеру, в рублях.
 
-Цена — `[prices] <provider> = 0.0` в конфиге проекта или переменная
-`WORDSTAT_<PROVIDER>_PRICE` (перекрывает конфиг; на сервере — только она).
-Не задана — стоимость неизвестна (`None`) и предупреждение, не ошибка:
-уже оплаченный поиск не должен падать из-за цены.
+Источник стоимости (`cost_source`): `provider` — фактическая из ответа
+провайдера (XML River и XMLStock её не отдают, поэтому пока не встречается);
+`price_table` — цена × единицы (один запрос); `cache` — ответ из журнала, 0;
+`None` — цены нет.
+
+Цена — переменная `WORDSTAT_<PROVIDER>_PRICE` (на сервере и в Windmill —
+только она, вызывающий берёт её из Directus «Цены API») или
+`[prices] <provider> = 0.0` в конфиге проекта (env перекрывает). Не задана —
+стоимость неизвестна (`None`) и предупреждение, не ошибка: уже оплаченный
+поиск не должен падать из-за цены.
 """
 
 from __future__ import annotations
@@ -19,6 +25,7 @@ from .version import CLI_NAME
 log = logging.getLogger(__name__)
 
 CURRENCY = "RUB"
+SOURCE_PROVIDER, SOURCE_PRICE_TABLE, SOURCE_CACHE = "provider", "price_table", "cache"
 
 
 def env_var(provider: str) -> str:
@@ -26,7 +33,12 @@ def env_var(provider: str) -> str:
 
 
 # Для `describe`: переменные с ценами всех известных провайдеров.
-ENV_VARS = {env_var(name): f"Цена одного запроса к {name}, руб.; перекрывает [prices] проекта" for name in PROVIDERS}
+ENV_VARS = {
+    env_var(
+        name
+    ): f"Цена одного запроса к {name}, руб.; перекрывает [prices] проекта (на сервере — единственный источник)"
+    for name in PROVIDERS
+}
 
 
 def resolve(providers: Sequence[str], configured: Mapping[str, float]) -> dict[str, float | None]:
@@ -46,14 +58,20 @@ def resolve(providers: Sequence[str], configured: Mapping[str, float]) -> dict[s
 
 
 def price(results: Sequence[WordstatResult], prices: Mapping[str, float | None]) -> tuple[list[dict], float | None]:
-    """Результаты для --json с `cost` / `cost_currency` и итог; итог None, если хоть одна стоимость неизвестна."""
+    """Результаты для --json с `cost` / `cost_source` / `cost_currency` и итог; итог None, если хоть одна неизвестна."""
     rows: list[dict] = []
     unknown: list[str] = []
     for r in results:
-        cost: float | None = 0.0 if r.from_cache else prices.get(r.provider)
+        cost: float | None
+        if r.from_cache:
+            cost, source = 0.0, SOURCE_CACHE
+        else:
+            cost = prices.get(r.provider)
+            source = SOURCE_PRICE_TABLE if cost is not None else None
         if cost is None and r.provider not in unknown:
             unknown.append(r.provider)
-        rows.append({**r.model_dump(mode="json"), "cost": cost, "cost_currency": CURRENCY})
+        row = {**r.model_dump(mode="json"), "cost": cost, "cost_source": source, "cost_currency": CURRENCY}
+        rows.append(row)
     for name in unknown:
         log.warning(
             "Цена запроса к %s не задана — cost null. Задайте её в [prices] конфига проекта или в %s.",

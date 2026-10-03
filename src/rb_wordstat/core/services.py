@@ -101,7 +101,7 @@ def resolve_prices(providers: list[str], start: Path) -> dict[str, float | None]
 
 
 def price_results(results: list[WordstatResult], prices: dict[str, float | None]) -> tuple[list[dict], float | None]:
-    """Результаты для --json с cost (руб.; из журнала — 0) и cost_currency, плюс cost_total."""
+    """Результаты для --json с cost (руб.; из журнала — 0), cost_source и cost_currency, плюс cost_total."""
     return pricing.price(results, prices)
 
 
