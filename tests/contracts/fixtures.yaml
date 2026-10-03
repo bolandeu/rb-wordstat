@@ -6,6 +6,11 @@
 #   recorded responses, a filled cache, fake keys — for every case unless it says
 #   `offline_cache: false`; those get `no_cache` (if set) and must fail before
 #   reaching the provider.
-placeholders: {}
-offline_cache: null
+#
+# wordstat: офлайн-данные — журнал ответов с записанным ответом XML River по
+# «купить диван» (точная, регион 213); его кладёт фикстура `contract_offline`
+# (tests/conftest.py) вместе с фальшивыми SERP_XMLRIVER_USER / _TOKEN.
+placeholders:
+  fixture_query: купить диван
+offline_cache: contract_offline
 no_cache: null

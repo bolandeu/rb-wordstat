@@ -62,3 +62,22 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 def fixture_json(name: str) -> dict:
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+
+
+@pytest.fixture
+def contract_offline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Офлайн-данные контрактных кейсов (tests/contracts/fixtures.yaml): журнал и фальшивые ключи.
+
+    В журнале — записанный ответ XML River (tests/fixtures/xmlriver_wordstat.json)
+    по «купить диван», точная частота, регион 213: `search --cache` берёт его,
+    не вызывая провайдера. Ключи фальшивые — до сети дело не доходит.
+    """
+    from rb_wordstat.core.cache import ResponseCache
+
+    data = fixture_json("xmlriver_wordstat.json")
+    ResponseCache().put(
+        provider="xmlriver", freq_type="exact", region=213, query="купить диван", total_value=data["totalValue"],
+        data=data,
+    )  # fmt: skip
+    monkeypatch.setenv("SERP_XMLRIVER_USER", "contract-user")
+    monkeypatch.setenv("SERP_XMLRIVER_TOKEN", "contract-token")
