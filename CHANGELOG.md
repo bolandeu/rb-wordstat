@@ -10,6 +10,13 @@ one of added/changed/deprecated/removed/fixed/security), and
 
 <!-- towncrier release notes start -->
 
+## [0.6.1] - 2026-10-03
+
+### Added
+
+- search --json: у каждого результата cost_source — откуда cost: price_table (цена × единицы), cache (из журнала, 0), null (цены нет); provider — фактическая стоимость из ответа провайдера (XML River и XMLStock её не отдают). На сервере и в Windmill цена — только WORDSTAT_<PROVIDER>_PRICE.
+
+
 ## [0.6.0] - 2026-10-03
 
 ### Added

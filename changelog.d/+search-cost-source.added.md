@@ -1,1 +1,0 @@
-search --json: у каждого результата cost_source — откуда cost: price_table (цена × единицы), cache (из журнала, 0), null (цены нет); provider — фактическая стоимость из ответа провайдера (XML River и XMLStock её не отдают). На сервере и в Windmill цена — только WORDSTAT_<PROVIDER>_PRICE.
