@@ -107,3 +107,35 @@ def test_cost_documented() -> None:
     for provider in ("xmlriver", "xmlstock"):
         entry = env[f"WORDSTAT_{provider.upper()}_PRICE"]
         assert entry["purpose"] == "price" and entry["required"] is False
+
+
+# --- источник стоимости (T175) -------------------------------------------------
+
+
+def test_cost_source(caplog: pytest.LogCaptureFixture) -> None:
+    live = result("диван", FreqType.broad, provider="xmlriver")
+    cached = result("диван", FreqType.phrase, provider="xmlstock").model_copy(update={"from_cache": True})
+    unpriced = result("кресло", FreqType.broad, provider="xmlstock")
+    rows, _total = services.price_results([live, cached, unpriced], {"xmlriver": 0.5, "xmlstock": None})
+    assert [(r["cost"], r["cost_source"]) for r in rows] == [(0.5, "price_table"), (0, "cache"), (None, None)]
+    assert "WORDSTAT_XMLSTOCK_PRICE" in caplog.text
+
+
+def test_search_json_has_cost_source(fake_search: list[dict], tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: F811
+    code, payload = invoke_json("--project", str(tmp_path), "search", "диван")
+    assert code == 0
+    assert (payload["results"][0]["cost"], payload["results"][0]["cost_source"]) == (None, None)
+
+    monkeypatch.setenv("WORDSTAT_FAKE_PRICE", "0.3")
+    code, payload = invoke_json("--project", str(tmp_path), "search", "диван")
+    assert (payload["results"][0]["cost"], payload["results"][0]["cost_source"]) == (0.3, "price_table")
+
+
+def test_cost_source_documented() -> None:
+    help_text = invoke("search", "--help", env={"COLUMNS": "200"}).stdout
+    for word in ("cost_source", "provider", "price_table", "cache"):
+        assert word in help_text
+    code, document = invoke_json("describe")
+    assert code == 0
+    search = next(c for c in document["command"]["commands"] if c["name"] == "search")
+    assert "cost_source" in search["description"]
