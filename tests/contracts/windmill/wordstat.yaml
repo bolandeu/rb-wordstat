@@ -1,0 +1,61 @@
+# Контракт потребителя: windmill → wordstat (consumer-driven, T170).
+# Источник правды — репо windmill (tests/contracts/wordstat/windmill.yaml); поставщик держит копию
+# в tests/contracts/windmill/wordstat.yaml и прогоняет в гейте релиза (формат T18: static / run / view).
+# Проверяется ТОЛЬКО то, на что опирается Windmill (f/semantics/collect_queries → run_tool). Лишние поля разрешены.
+contract: 1
+consumer: windmill
+provider: wordstat
+provider_range: ">=0.6.2,<1.0"
+contact: "агент windmill через dev"
+
+static:
+  commands:
+    - path: [search]
+      arguments: [queries]
+      options: [--freq, --lr, --cache, --json]
+    - path: [describe]
+      options: [--json]
+  exit_codes: [0, 1, 2, 3, 5]
+  env:                              # ключи провайдеров — общие с serp; цена — из Directus «Цены API»
+    - SERP_XMLRIVER_USER
+    - SERP_XMLRIVER_TOKEN
+    - SERP_XMLSTOCK_USER
+    - SERP_XMLSTOCK_TOKEN
+    - WORDSTAT_DATABASE_URL
+    - WORDSTAT_XMLRIVER_PRICE
+    - WORDSTAT_XMLSTOCK_PRICE
+
+run:
+  - name: exact_frequency_list_with_cost
+    # точные частоты списка фраз по региону, из кэша поставщика
+    argv: [search, "{fixture_query}", --freq, exact, --lr, "213", --cache, --json]
+    exit: 0
+    stdout_json_schema:
+      type: object
+      required: [ok, results, billable_requests_total, cost_total]
+      properties:
+        ok: {const: true}
+        results:
+          type: array
+          items:
+            type: object
+            required: [query, freq_type, total_value, provider, fetched_at, from_cache, billable_requests, cost,
+                       cost_source, cost_currency]
+            properties:
+              query: {type: string}
+              freq_type: {const: exact}
+              total_value: {type: integer, minimum: 0}
+              billable_requests: {type: integer, minimum: 0}
+              cost: {type: [number, "null"]}
+              cost_source: {enum: [price_table, cache, provider, null]}
+              cost_currency: {const: RUB}
+
+  - name: error_is_json_under_json
+    argv: [search, --json]
+    exit: 2
+    stdout_json_schema:
+      type: object
+      required: [ok, error]
+      properties: {ok: {const: false}, error: {type: object, required: [code, message]}}
+
+view: []

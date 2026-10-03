@@ -12,6 +12,9 @@ step's name and output, then `release: code failed` (exit 1) or, when only
 the vulnerability audit failed, `release: audit failed` (exit 3):
 
     uv lock --check · ruff check · ruff format --check · ty check · pytest ·
+    contracts (tests/test_contracts.py: the consumers' cases from
+    tests/contracts/<consumer>/*.yaml, run apart from pytest — a failing case
+    stops the release and is named with its consumer) ·
     existing tests (never fails: lists every test that existed at the last tag
     and has since changed or gone — a changed or removed test function, changed
     module-level code of a test file, a changed snapshot or data file; each goes
@@ -82,13 +85,15 @@ def release_commit_message(version: str) -> str:
 
 
 FRAGMENTS = ROOT / _towncrier().get("directory", "changelog.d")
+CONTRACT_TESTS = "tests/test_contracts.py"
+VERSION_ENV = "RB_PROVIDER_VERSION"  # tests/test_contracts.py: the version being built, for `provider:` ranges
 PARTS = ("patch", "minor", "major")
 COMMANDS = (
     ("uv lock --check", ("uv", "lock", "--check")),
     ("ruff check", ("uv", "run", "ruff", "check", ".")),
     ("ruff format --check", ("uv", "run", "ruff", "format", "--check", ".")),
     ("ty check", ("uv", "run", "ty", "check")),
-    ("pytest", ("uv", "run", "pytest")),
+    ("pytest", ("uv", "run", "pytest", f"--ignore={CONTRACT_TESTS}")),  # contracts: their own step
 )
 AUDIT_STEP = "vulnerability audit"
 EXIT_CODE_FAILED = 1  # any code/packaging step: lock, lint, types, tests, fragment, wheel
@@ -347,6 +352,39 @@ def check_existing_tests() -> str:
     return f"{len(found)} changed since {last} — put each in the release report with its reason:\n  {listed}"
 
 
+_CONTRACT_RESULT = re.compile(r"::test_contract\[([^\]]+)\] (PASSED|FAILED|SKIPPED|ERROR)")
+
+
+def contract_summary(output: str) -> str:
+    """'N cases from K consumers' (+ failed / skipped) from a `pytest -vv` run of tests/test_contracts.py."""
+    results = {case: status for case, status in _CONTRACT_RESULT.findall(output)}
+    if not results:
+        return "0 cases"
+    consumers = {case.split(":", 1)[0] for case in results}
+    cases, sources = len(results), len(consumers)
+    summary = f"{cases} case{'s' * (cases != 1)} from {sources} consumer{'s' * (sources != 1)}"
+    failed = sum(status in ("FAILED", "ERROR") for status in results.values())
+    skipped = sum(status == "SKIPPED" for status in results.values())
+    notes = [f"{failed} failed"] * bool(failed) + [f"{skipped} skipped (provider version)"] * bool(skipped)
+    return f"{summary}: {', '.join(notes)}" if notes else summary
+
+
+def check_contracts(version: str | None = None) -> str:
+    """The consumers' contract cases, as their own gate step: any failure stops the release."""
+    if not (ROOT / CONTRACT_TESTS).is_file():
+        return f"none ({CONTRACT_TESTS} doesn't exist)"
+    argv = ["uv", "run", *(arg for extra in gate_extras() for arg in ("--extra", extra)), "pytest", CONTRACT_TESTS]
+    argv += ["-vv", "--no-cov", "-p", "no:cacheprovider", "-rfE", "--tb=no"]  # -vv: the reason is not cut off
+    env = {**os.environ, **({VERSION_ENV: version} if version else {})}
+    result = subprocess.run(argv, cwd=ROOT, text=True, capture_output=True, env=env, check=False)
+    output = (result.stdout + result.stderr).strip()
+    summary = contract_summary(output)
+    if result.returncode not in (0, 5):  # 5: no case collected
+        failures = [line for line in output.splitlines() if line.startswith(("FAILED", "ERROR"))]
+        raise StepFailed(f"{summary}\n" + "\n".join(failures or [output]))
+    return summary
+
+
 def check_vulnerabilities() -> str:
     scanner = shutil.which("osv-scanner")
     if scanner is None:
@@ -449,6 +487,7 @@ def check_installed_wheel(version: str | None) -> str:
 def run_gate(version: str | None) -> None:
     steps: list[tuple[str, Callable[[], str]]] = [
         *((name, lambda argv=argv: run_command(argv)) for name, argv in COMMANDS),
+        ("contracts", lambda: check_contracts(version)),
         ("existing tests", check_existing_tests),
         ("external dependencies", check_external_deps),
         ("changelog fragment", check_fragment),
