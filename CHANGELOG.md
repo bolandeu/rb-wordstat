@@ -10,6 +10,13 @@ one of added/changed/deprecated/removed/fixed/security), and
 
 <!-- towncrier release notes start -->
 
+## [0.6.2] - 2026-10-03
+
+### Added
+
+- search --json: стоимость — за каждый платный ответ провайдера: у результата billable_requests (сколько платных ответов ушло на пару запрос × тип частоты; ответы-ошибки, повторы и отказавший перед фолбэком провайдер не считаются; из журнала — 0), cost = billable_requests × цена, в конверте billable_requests_total.
+
+
 ## [0.6.1] - 2026-10-03
 
 ### Added
