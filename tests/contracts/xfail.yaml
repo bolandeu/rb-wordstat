@@ -1,0 +1,4 @@
+# Cases of the consumers' contracts this version doesn't pass yet: case id -> reason
+# (tests/test_contracts.py runs them as strict xfail — a case that starts passing
+# fails the run: remove its entry). The contracts themselves stay as the consumer wrote them.
+"windmill:run:error_is_json_under_json": "tools backlog 26: шаблон cli-generator — ошибки использования под --json не в JSON"

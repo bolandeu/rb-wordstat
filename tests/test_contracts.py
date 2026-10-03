@@ -15,6 +15,11 @@ truth is the consumer's repo; this repo keeps a copy and runs it in its gate.
 - `view` — a `v1` view's columns and type families, in `describe --json` and on
   the migrated test database (SQLite; PostgreSQL too under scripts/pg_test.sh).
 
+Cases this version can't pass yet are listed in `tests/contracts/xfail.yaml` (case
+id -> reason, e.g. a backlog item) — this repo's side, the contract stays as is.
+Those run as strict xfail: a listed case that starts passing fails the run, so the
+entry gets removed.
+
 `provider_range` limits a contract to those versions of this tool. One test per
 case, id `<consumer>:<section>:<name>`. The gate runs this file as its own step
 (`release.py --check`: "contracts"); a failing case stops the release. Never edit
@@ -49,6 +54,7 @@ from rb_wordstat.core.version import DEV_VERSION, cli_name, installed_version
 CONTRACTS = Path(__file__).parent / "contracts"
 SCHEMA = json.loads((CONTRACTS / "schema.json").read_text())
 FIXTURES = CONTRACTS / "fixtures.yaml"
+XFAIL = CONTRACTS / "xfail.yaml"
 # The version the gate is building (release.py sets it), else the installed one.
 VERSION_ENV = "RB_PROVIDER_VERSION"
 PG_URL = os.environ.get("TEST_DATABASE_URL")
@@ -117,6 +123,21 @@ def load_fixtures(path: Path = FIXTURES) -> dict[str, Any]:
         return {}
     content = _read(path, "fixtures.yaml") or {}
     _validate(content, "fixtures", "fixtures.yaml")
+    return content
+
+
+def load_xfail(path: Path, known: list[str]) -> dict[str, str]:
+    """Expected failures: case id -> reason. An id no contract has, or one without a reason, is an error."""
+    if not path.is_file():
+        return {}
+    content = _read(path, "xfail.yaml") or {}
+    if not isinstance(content, dict):
+        raise ContractError("xfail.yaml: a mapping of case id -> reason")
+    for case_id, reason in content.items():
+        if case_id not in known:
+            raise ContractError(f"xfail.yaml: no case '{case_id}' in the contracts (remove the entry)")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ContractError(f"xfail.yaml: case '{case_id}' has no reason")
     return content
 
 
@@ -363,19 +384,33 @@ def _version() -> str:
 try:
     CONTRACT_LIST = load_contracts()
     FIXTURE_SPEC = load_fixtures()
+    EXPECTED_FAILURES = load_xfail(XFAIL, [case_id for contract in CONTRACT_LIST for case_id in case_ids(contract)])
 except ContractError as exc:  # a broken file fails the run, naming the file
-    CONTRACT_LIST, FIXTURE_SPEC = [], {}
+    CONTRACT_LIST, FIXTURE_SPEC, EXPECTED_FAILURES = [], {}, {}
     LOAD_ERROR: str | None = str(exc)
 else:
     LOAD_ERROR = None
-CASES = [(contract, case_id, kind, spec) for contract in CONTRACT_LIST for case_id, kind, spec in cases(contract)]
+CASES = [
+    pytest.param(
+        contract,
+        case_id,
+        kind,
+        spec,
+        id=case_id,
+        marks=[pytest.mark.xfail(reason=EXPECTED_FAILURES[case_id], strict=True)]
+        if case_id in EXPECTED_FAILURES
+        else [],
+    )
+    for contract in CONTRACT_LIST
+    for case_id, kind, spec in cases(contract)
+]
 
 
 def test_contract_files_are_valid() -> None:
     assert LOAD_ERROR is None, LOAD_ERROR
 
 
-@pytest.mark.parametrize(("contract", "case_id", "kind", "spec"), CASES, ids=[case[1] for case in CASES])
+@pytest.mark.parametrize(("contract", "case_id", "kind", "spec"), CASES)
 def test_contract(
     contract: Contract,
     case_id: str,
