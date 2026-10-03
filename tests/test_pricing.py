@@ -139,3 +139,72 @@ def test_cost_source_documented() -> None:
     assert code == 0
     search = next(c for c in document["command"]["commands"] if c["name"] == "search")
     assert "cost_source" in search["description"]
+
+
+# --- платные вызовы провайдера (T175, дополнение) ------------------------------
+
+
+def test_search_json_billable_requests_total(fake_search: list[dict], tmp_path: Path) -> None:  # noqa: F811
+    _project(tmp_path, {"fake": 0.4})
+    code, payload = invoke_json(
+        "--project", str(tmp_path), "search", "диван", "кресло", "стул", "--freq", "broad,exact"
+    )
+    assert code == 0
+    assert [r["billable_requests"] for r in payload["results"]] == [1] * 6
+    assert payload["billable_requests_total"] == 6
+    assert [r["cost"] for r in payload["results"]] == [0.4] * 6
+    assert payload["cost_total"] == 2.4
+
+
+def test_cost_is_billable_requests_times_price() -> None:
+    twice = result("диван", FreqType.broad, provider="xmlriver").model_copy(update={"billable_requests": 2})
+    cached = result("диван", FreqType.phrase, provider="xmlriver").model_copy(
+        update={"from_cache": True, "billable_requests": 0}
+    )
+    rows, total = services.price_results([twice, cached], {"xmlriver": 0.1})
+    assert [(r["billable_requests"], r["cost"], r["cost_source"]) for r in rows] == [
+        (2, 0.2, "price_table"),
+        (0, 0, "cache"),
+    ]
+    assert total == 0.2
+
+
+def test_error_answers_retries_and_fallback_are_not_billable() -> None:
+    from rb_wordstat import WordstatClient, WordstatParams
+    from rb_wordstat.providers import XmlRiverProvider, XmlStockProvider
+
+    from .conftest import fixture_json
+    from .test_providers import make
+
+    busy = {"code": 110, "error": "нет свободных каналов"}
+    # Ответ-ошибка, повтор, успех — платный только успешный ответ.
+    retried = make(XmlRiverProvider, [busy, fixture_json("xmlriver_wordstat.json")])
+    [hit] = WordstatClient(providers=[retried], cache=False).search_sync(WordstatParams(query="диван"))
+    assert hit.billable_requests == 1
+
+    # Основной отказал после всех попыток (ошибки не платные) → ответил фолбэк.
+    failed = make(XmlRiverProvider, [busy, 503, busy])
+    backup = make(XmlStockProvider, [fixture_json("xmlstock_wordstat.json")])
+    [hit] = WordstatClient(providers=[failed, backup], cache=False).search_sync(WordstatParams(query="диван"))
+    assert (hit.provider, hit.billable_requests) == ("xmlstock", 1)
+
+
+def test_journal_answer_is_not_billable() -> None:
+    from rb_wordstat import WordstatClient, WordstatParams
+    from rb_wordstat.core.cache import ResponseCache
+
+    from .test_search import FakeProvider
+
+    client = WordstatClient(providers=[FakeProvider("a")], cache=ResponseCache())
+    params = WordstatParams(query="диван")
+    assert client.search_sync(params)[0].billable_requests == 1
+    cached = client.search_sync(params, use_cache=True)[0]
+    assert (cached.from_cache, cached.billable_requests) == (True, 0)
+
+
+def test_billable_requests_documented() -> None:
+    help_text = invoke("search", "--help", env={"COLUMNS": "200"}).stdout
+    assert "billable_requests" in help_text and "billable_requests_total" in help_text
+    _code, document = invoke_json("describe")
+    search = next(c for c in document["command"]["commands"] if c["name"] == "search")
+    assert "billable_requests_total" in search["description"]
