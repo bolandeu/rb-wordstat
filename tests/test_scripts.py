@@ -232,3 +232,16 @@ def test_existing_tests_step_reports_against_the_last_tag(tmp_path: Path, monkey
     assert "tests/test_x.py::test_a changed" in detail
     assert "tests/snapshots/help.txt changed" in detail
     assert "test_added" not in detail
+
+
+def test_contract_summary_counts_expected_failures() -> None:
+    """A case in tests/contracts/xfail.yaml shows as XFAIL: counted and named, not dropped from the total."""
+    output = "\n".join(
+        [
+            "tests/test_contracts.py::test_contract[windmill:static:env] PASSED [ 50%]",
+            "tests/test_contracts.py::test_contract[windmill:run:error] XFAIL (backlog 26) [100%]",
+        ]
+    )
+    assert (
+        release.contract_summary(output) == "2 cases from 1 consumer: 1 expected to fail (tests/contracts/xfail.yaml)"
+    )

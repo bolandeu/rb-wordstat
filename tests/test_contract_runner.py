@@ -24,6 +24,7 @@ from tests.test_contracts import (
     check_view_columns,
     expand_argv,
     load_contracts,
+    load_xfail,
     run_case,
     type_family,
 )
@@ -146,6 +147,21 @@ def test_static_sections() -> None:
     ]:
         with pytest.raises(ContractError, match=what):
             check()
+
+
+def test_expected_failures_name_known_cases_with_a_reason(tmp_path: Path) -> None:
+    """tests/contracts/xfail.yaml: case id -> reason; a stale or reasonless entry is an error, no file — none."""
+    known = ["windmill:run:a", "windmill:run:b"]
+    assert load_xfail(tmp_path / "xfail.yaml", known) == {}
+    path = tmp_path / "xfail.yaml"
+    path.write_text('windmill:run:a: "backlog 26: причина"\n')
+    assert load_xfail(path, known) == {"windmill:run:a": "backlog 26: причина"}
+    path.write_text('windmill:run:gone: "backlog 26"\n')
+    with pytest.raises(ContractError, match=r"xfail\.yaml.*windmill:run:gone"):
+        load_xfail(path, known)
+    path.write_text("windmill:run:a: \n")
+    with pytest.raises(ContractError, match=r"xfail\.yaml.*windmill:run:a"):
+        load_xfail(path, known)
 
 
 def test_placeholders_come_from_the_providers_fixtures() -> None:
