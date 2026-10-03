@@ -26,9 +26,9 @@ static:
     - WORDSTAT_XMLSTOCK_PRICE
 
 run:
-  - name: exact_frequency_list_with_cost
-    # точные частоты списка фраз по региону, из кэша поставщика
-    argv: [search, "{fixture_query}", --freq, exact, --lr, "213", --cache, --json]
+  - name: broad_popular_associations_with_cost
+    # широкая частота по затравкам: левая колонка — кандидаты, правая — журнал (ранжирование — по Букварикс, S3)
+    argv: [search, "{fixture_query}", --freq, broad, --lr, "213", --cache, --json]
     exit: 0
     stdout_json_schema:
       type: object
@@ -39,12 +39,16 @@ run:
           type: array
           items:
             type: object
-            required: [query, freq_type, total_value, provider, fetched_at, from_cache, billable_requests, cost,
-                       cost_source, cost_currency]
+            required: [query, freq_type, total_value, popular, associations, provider, fetched_at, from_cache,
+                       billable_requests, cost, cost_source, cost_currency]
             properties:
               query: {type: string}
-              freq_type: {const: exact}
+              freq_type: {const: broad}
               total_value: {type: integer, minimum: 0}
+              popular: &phrases
+                type: array
+                items: {type: object, required: [text, value], properties: {text: {type: string}, value: {type: integer}}}
+              associations: *phrases
               billable_requests: {type: integer, minimum: 0}
               cost: {type: [number, "null"]}
               cost_source: {enum: [price_table, cache, provider, null]}
