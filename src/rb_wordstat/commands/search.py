@@ -127,15 +127,21 @@ def search(
     Каждый ответ провайдера пишется в журнал (`wordstat cache`); с --cache
     повторный запрос берётся оттуда бесплатно.
 
-    --json: {"ok": true, "count": N, "cost_total": руб., "results": [{query,
-    freq_type, total_value, popular: [{text, value}], associations: [...],
-    provider, fetched_at, from_cache, cost, cost_source, cost_currency:
-    "RUB"}, ...]} (+ "saved_to" при --output).
+    --json: {"ok": true, "count": N, "billable_requests_total": N,
+    "cost_total": руб., "results": [{query, freq_type, total_value, popular:
+    [{text, value}], associations: [...], provider, fetched_at, from_cache,
+    billable_requests, cost, cost_source, cost_currency: "RUB"}, ...]} (+
+    "saved_to" при --output).
 
-    Стоимость: cost — цена пары у провайдера, ответившего на неё; cost_total
-    — сумма. cost_source — откуда cost: "provider" (фактическая из ответа;
-    XML River и XMLStock её не отдают), "price_table" (цена × единицы), "cache"
-    (из журнала, 0), null (цены нет). Цена — WORDSTAT_<PROVIDER>_PRICE (на
+    Стоимость — за каждый платный ответ провайдера. billable_requests —
+    сколько их ушло на пару (запрос × тип частоты): один (похожие и
+    ассоциации — в том же ответе, без страниц; каждый тип частоты — свой
+    запрос); сбои, ответы-ошибки, их повторы и отказавший перед фолбэком
+    провайдер не считаются; из журнала — 0. cost — billable_requests × цена;
+    cost_total и billable_requests_total — суммы. cost_source — откуда cost:
+    "provider" (фактическая из ответа; XML River и XMLStock её не отдают),
+    "price_table" (цена × billable_requests), "cache" (из журнала, 0), null
+    (цены нет). Цена — WORDSTAT_<PROVIDER>_PRICE (на
     сервере и в Windmill — только она) или [prices] <провайдер> = 0.0 в
     конфиге проекта. Не задана — cost, cost_source и cost_total null,
     предупреждение в stderr.
@@ -168,7 +174,13 @@ def search(
 
     prices = services.resolve_prices(sorted({r.provider for r in results}), project)
     rows, cost_total = services.price_results(results, prices)
-    payload: dict = {"count": len(results), "cost_total": cost_total, "results": rows}
+    billable_total = sum(row["billable_requests"] for row in rows)
+    payload: dict = {
+        "count": len(results),
+        "billable_requests_total": billable_total,
+        "cost_total": cost_total,
+        "results": rows,
+    }
     if output_path is not None:
         services.save_results(results, output_path, csv_mode=services.csv_mode_for(csv_mode.value, freq_types))
         payload["saved_to"] = str(output_path)

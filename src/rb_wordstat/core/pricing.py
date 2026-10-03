@@ -2,8 +2,8 @@
 
 Источник стоимости (`cost_source`): `provider` — фактическая из ответа
 провайдера (XML River и XMLStock её не отдают, поэтому пока не встречается);
-`price_table` — цена × единицы (один запрос); `cache` — ответ из журнала, 0;
-`None` — цены нет.
+`price_table` — цена × `billable_requests` (платные ответы провайдера на пару);
+`cache` — ответ из журнала, 0; `None` — цены нет.
 
 Цена — переменная `WORDSTAT_<PROVIDER>_PRICE` (на сервере и в Windmill —
 только она, вызывающий берёт её из Directus «Цены API») или
@@ -58,19 +58,31 @@ def resolve(providers: Sequence[str], configured: Mapping[str, float]) -> dict[s
 
 
 def price(results: Sequence[WordstatResult], prices: Mapping[str, float | None]) -> tuple[list[dict], float | None]:
-    """Результаты для --json с `cost` / `cost_source` / `cost_currency` и итог; итог None, если хоть одна неизвестна."""
+    """Результаты для --json с `billable_requests` / `cost` / `cost_source` / `cost_currency` и итог стоимости.
+
+    Итог None, если хоть одна стоимость неизвестна.
+    """
     rows: list[dict] = []
     unknown: list[str] = []
     for r in results:
         cost: float | None
+        billable = 0 if r.from_cache else r.billable_requests
+        unit = prices.get(r.provider)
         if r.from_cache:
             cost, source = 0.0, SOURCE_CACHE
+        elif unit is None:
+            cost, source = None, None
         else:
-            cost = prices.get(r.provider)
-            source = SOURCE_PRICE_TABLE if cost is not None else None
+            cost, source = round(billable * unit, 6), SOURCE_PRICE_TABLE
         if cost is None and r.provider not in unknown:
             unknown.append(r.provider)
-        row = {**r.model_dump(mode="json"), "cost": cost, "cost_source": source, "cost_currency": CURRENCY}
+        row = {
+            **r.model_dump(mode="json"),
+            "billable_requests": billable,
+            "cost": cost,
+            "cost_source": source,
+            "cost_currency": CURRENCY,
+        }
         rows.append(row)
     for name in unknown:
         log.warning(

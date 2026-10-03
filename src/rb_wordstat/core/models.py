@@ -54,6 +54,7 @@ class WordstatResult(BaseModel):
     provider: str = ""  # какой провайдер из очереди ответил
     fetched_at: datetime | None = None  # когда провайдер отдал этот ответ
     from_cache: bool = False  # взят из журнала (--cache), а не живым запросом
+    billable_requests: int = 1  # платных ответов провайдера на пару; из журнала — 0
 
 
 class WordstatParams(BaseModel):

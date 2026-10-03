@@ -123,7 +123,12 @@ class WordstatClient:
                 if hit is not None:
                     result = self._class(index).to_result(hit.data, query, freq_type)
                     return result.model_copy(
-                        update={"provider": name, "fetched_at": hit.fetched_at, "from_cache": True}
+                        update={
+                            "provider": name,
+                            "fetched_at": hit.fetched_at,
+                            "from_cache": True,
+                            "billable_requests": 0,
+                        }
                     )
 
         errors: list[ProviderError | AuthRequired] = []
@@ -134,7 +139,9 @@ class WordstatClient:
                     data = await provider.fetch_raw(query, freq_type, lr)
                 result = type(provider).to_result(data, query, freq_type)
                 fetched_at = self._save(name, freq_type, lr, query, result.total_value, data)
-                return result.model_copy(update={"provider": name, "fetched_at": fetched_at})
+                # Платный — только ответ с данными; сбои, ответы-ошибки и их повторы
+                # (fetch_raw) и отказавшие провайдеры очереди — нет.
+                return result.model_copy(update={"provider": name, "fetched_at": fetched_at, "billable_requests": 1})
             except (ProviderError, AuthRequired) as exc:
                 errors.append(exc)
                 has_next = index + 1 < len(names)
