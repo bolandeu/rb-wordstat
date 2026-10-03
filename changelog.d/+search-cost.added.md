@@ -1,1 +1,0 @@
-search --json: у каждого результата cost (руб., из журнала — 0) и cost_currency "RUB", в конверте cost_total. Цена запроса — [prices] <провайдер> в конфиге проекта или WORDSTAT_<PROVIDER>_PRICE (перекрывает конфиг); не задана — null и предупреждение в stderr.

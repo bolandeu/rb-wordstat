@@ -10,6 +10,17 @@ one of added/changed/deprecated/removed/fixed/security), and
 
 <!-- towncrier release notes start -->
 
+## [0.6.0] - 2026-10-03
+
+### Added
+
+- search --json: у каждого результата cost (руб., из журнала — 0) и cost_currency "RUB", в конверте cost_total. Цена запроса — [prices] <провайдер> в конфиге проекта или WORDSTAT_<PROVIDER>_PRICE (перекрывает конфиг); не задана — null и предупреждение в stderr.
+
+### Changed
+
+- Шаблон cli-generator v1.5.6: TDD в правилах, шаг гейта «existing tests», мутационное тестирование (`uv run --group mutation mutmut run`).
+
+
 ## [0.5.2] - 2026-10-02
 
 ### Changed
