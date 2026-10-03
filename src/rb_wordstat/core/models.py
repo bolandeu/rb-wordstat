@@ -79,6 +79,8 @@ class ProjectConfig(BaseModel):
     name: str
     # Очередь провайдеров: первый — основной, остальные — фолбэки по порядку.
     providers: list[str] = Field(default_factory=lambda: list(DEFAULT_PROVIDERS))
+    # Цена одного запроса по провайдеру, руб.: [prices] xmlriver = 0.0; env WORDSTAT_<PROVIDER>_PRICE перекрывает.
+    prices: dict[str, float] = Field(default_factory=dict)
     cli: CliCompat = Field(default_factory=CliCompat)
 
     @field_validator("providers", mode="before")

@@ -12,9 +12,15 @@
  Каждый ответ провайдера пишется в журнал (`wordstat cache`); с --cache
  повторный запрос берётся оттуда бесплатно.
 
- --json: {"ok": true, "count": N, "results": [{query, freq_type,
- total_value, popular: [{text, value}], associations: [...], provider,
- fetched_at, from_cache}, ...]} (+ "saved_to" при --output).
+ --json: {"ok": true, "count": N, "cost_total": руб., "results": [{query,
+ freq_type, total_value, popular: [{text, value}], associations: [...],
+ provider, fetched_at, from_cache, cost, cost_currency: "RUB"}, ...]}
+ (+ "saved_to" при --output).
+
+ Стоимость: cost — цена одного запроса к провайдеру, ответившему на пару
+ (из журнала — 0); cost_total — сумма. Цена — [prices] <провайдер> = 0.0
+ в конфиге проекта или WORDSTAT_<PROVIDER>_PRICE (перекрывает конфиг). Не
+ задана — cost и cost_total null, предупреждение в stderr.
 
 
  Примеры:

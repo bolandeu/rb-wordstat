@@ -127,9 +127,15 @@ def search(
     Каждый ответ провайдера пишется в журнал (`wordstat cache`); с --cache
     повторный запрос берётся оттуда бесплатно.
 
-    --json: {"ok": true, "count": N, "results": [{query, freq_type,
-    total_value, popular: [{text, value}], associations: [...], provider,
-    fetched_at, from_cache}, ...]} (+ "saved_to" при --output).
+    --json: {"ok": true, "count": N, "cost_total": руб., "results": [{query,
+    freq_type, total_value, popular: [{text, value}], associations: [...],
+    provider, fetched_at, from_cache, cost, cost_currency: "RUB"}, ...]}
+    (+ "saved_to" при --output).
+
+    Стоимость: cost — цена одного запроса к провайдеру, ответившему на пару
+    (из журнала — 0); cost_total — сумма. Цена — [prices] <провайдер> = 0.0
+    в конфиге проекта или WORDSTAT_<PROVIDER>_PRICE (перекрывает конфиг). Не
+    задана — cost и cost_total null, предупреждение в stderr.
 
     \b
     Примеры:
@@ -145,7 +151,8 @@ def search(
     Example: {cli} search "купить диван" --freq all --json
     """
     freq_types = services.resolve_freq(freq)
-    providers = services.resolve_providers(provider, Path(ctx.obj.get("project") or Path.cwd()))
+    project = Path(ctx.obj.get("project") or Path.cwd())
+    providers = services.resolve_providers(provider, project)
     output.vecho(ctx, f"Провайдеры: {', '.join(providers)}")
     results = services.search(
         queries,
@@ -156,7 +163,9 @@ def search(
         max_age=services.parse_age(max_age) if max_age else None,
     )
 
-    payload: dict = {"count": len(results), "results": [r.model_dump(mode="json") for r in results]}
+    prices = services.resolve_prices(sorted({r.provider for r in results}), project)
+    rows, cost_total = services.price_results(results, prices)
+    payload: dict = {"count": len(results), "cost_total": cost_total, "results": rows}
     if output_path is not None:
         services.save_results(results, output_path, csv_mode=services.csv_mode_for(csv_mode.value, freq_types))
         payload["saved_to"] = str(output_path)

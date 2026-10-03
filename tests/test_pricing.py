@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -71,7 +72,7 @@ def test_price_results(caplog: pytest.LogCaptureFixture) -> None:
 
 
 def test_price_total_has_no_float_noise() -> None:
-    rows, total = services.price_results([result("x", FreqType.broad, provider="a")] * 3, {"a": 0.1})
+    _rows, total = services.price_results([result("x", FreqType.broad, provider="a")] * 3, {"a": 0.1})
     assert total == 0.3
 
 
@@ -90,16 +91,13 @@ def test_search_json_has_cost(fake_search: list[dict], tmp_path: Path, monkeypat
     assert (payload["results"][0]["cost"], payload["cost_total"]) == (0, 0)
 
 
-def test_search_without_price_warns(
-    fake_search: list[dict],  # noqa: F811
-    tmp_path: Path,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    code, payload = invoke_json("--project", str(tmp_path), "search", "диван")
-    assert code == 0
+def test_search_without_price_warns(fake_search: list[dict], tmp_path: Path) -> None:  # noqa: F811
+    run = invoke("--project", str(tmp_path), "search", "диван", "--json")
+    assert run.exit_code == 0
+    payload = json.loads(run.stdout)
     assert payload["results"][0]["cost"] is None
     assert payload["cost_total"] is None
-    assert "WORDSTAT_FAKE_PRICE" in caplog.text
+    assert "WORDSTAT_FAKE_PRICE" in run.stderr  # CLI шлёт logging в stderr (configure_logging), не в caplog
 
 
 def test_cost_documented() -> None:

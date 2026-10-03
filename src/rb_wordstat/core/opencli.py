@@ -182,6 +182,12 @@ def env_vars() -> list[dict]:
             {"name": name, "purpose": "database", "description": description, "required": False}
             for name, description in db.ENV_VARS.items()
         ]
+    if module_exists(f"{_PACKAGE_NAME}.core.pricing"):  # wordstat: цены запросов (не из шаблона)
+        pricing = importlib.import_module(f"{_PACKAGE_NAME}.core.pricing")
+        found += [
+            {"name": name, "purpose": "price", "description": description, "required": False}
+            for name, description in pricing.ENV_VARS.items()
+        ]
     return found
 
 

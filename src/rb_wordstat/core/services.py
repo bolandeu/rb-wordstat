@@ -11,6 +11,7 @@ import tomli_w
 from packaging.version import Version
 from pydantic import ValidationError
 
+from . import pricing
 from .client import WordstatClient
 from .errors import CliTooOld, InvalidArguments, ProjectNotInitialized
 from .models import ALL_FREQ_TYPES, DEFAULT_PROVIDERS, FreqType, ProjectConfig, WordstatParams, WordstatResult
@@ -90,6 +91,18 @@ def resolve_providers(explicit: str | None, start: Path) -> list[str]:
     if root is not None:
         return load_config(root).providers
     return list(DEFAULT_PROVIDERS)
+
+
+def resolve_prices(providers: list[str], start: Path) -> dict[str, float | None]:
+    """Цена запроса по провайдерам: WORDSTAT_<PROVIDER>_PRICE → [prices] проекта → None (неизвестна)."""
+    root = find_project_root(start)
+    configured = load_config(root).prices if root is not None else {}
+    return pricing.resolve(providers, configured)
+
+
+def price_results(results: list[WordstatResult], prices: dict[str, float | None]) -> tuple[list[dict], float | None]:
+    """Результаты для --json с cost (руб.; из журнала — 0) и cost_currency, плюс cost_total."""
+    return pricing.price(results, prices)
 
 
 FREQ_CHOICES = ["broad", "phrase", "exact", "exact-ord", "all"]
