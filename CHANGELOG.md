@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Versions follow
 
 The changelog is written by `antagor publish`; don't edit it by hand.
 
+## v0.7.0 — 2026-10-23
+
+### Outside epics
+
+- Ignore the revoked XML River key in git history by fingerprint (WORDSTAT-001)
+
 ## [0.6.2] - 2026-10-03
 
 ### Added

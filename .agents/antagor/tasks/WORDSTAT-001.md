@@ -1,7 +1,7 @@
 ---
 id: WORDSTAT-001
 title: Ignore the revoked XML River key in git history by fingerprint
-status: publish
+status: done
 attempts: 0
 blocked: false
 blocked_reason: null
