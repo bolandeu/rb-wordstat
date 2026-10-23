@@ -124,6 +124,8 @@ pytest_add_cli_args = ["--no-cov"]  # fail_under would kill every mutant
 
 [tool.coverage.run]
 source = ["src"]
+# sysmon (default on 3.14) keeps a record per recompiled code object; Typer recompiles annotations on every invoke, so memory grows.
+core = "ctrace"
 
 [tool.coverage.report]
 # The template ships at ~94%; keep the bar where it is instead of letting
