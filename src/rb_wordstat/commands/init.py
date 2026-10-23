@@ -1,3 +1,5 @@
+"""The `init` command: create the project folder with its config file in the target directory."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -19,7 +21,7 @@ def init(
 ) -> None:
     """Создать проект в папке: .wordstat/config.toml с очередью провайдеров и min_version.
 
-    Example: {cli} init --non-interactive
+    Example: {cli} init --name demo
     """
     target = Path(ctx.obj.get("project") or Path.cwd()).resolve()
 

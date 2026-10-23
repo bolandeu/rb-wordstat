@@ -9,22 +9,6 @@
     "name": "wordstat",
     "options": [
       {
-        "name": "--project",
-        "arguments": [
-          {
-            "name": "PROJECT",
-            "required": true
-          }
-        ],
-        "description": "Путь к корню проекта (иначе ищется вверх от текущей папки).",
-        "metadata": [
-          {
-            "name": "x-rb-type",
-            "value": "str"
-          }
-        ]
-      },
-      {
         "name": "--json",
         "description": "Машиночитаемый вывод: JSON в stdout.",
         "metadata": [
@@ -109,6 +93,25 @@
         ]
       },
       {
+        "name": "--project",
+        "arguments": [
+          {
+            "name": "TEXT",
+            "required": true,
+            "arity": {
+              "maximum": 1
+            }
+          }
+        ],
+        "description": "Путь к корню проекта (иначе ищется вверх от текущей папки).",
+        "metadata": [
+          {
+            "name": "x-rb-type",
+            "value": "str"
+          }
+        ]
+      },
+      {
         "name": "--ai",
         "description": "Напечатать памятку для AI-агентов (SKILL.md) и выйти.",
         "metadata": [
@@ -125,15 +128,319 @@
     ],
     "commands": [
       {
+        "name": "doctor",
+        "description": "Диагностика: версия, проект, настройки, база и её схема, журнал, связка ключей, доступы.\n\nВсегда завершается с кодом 0 — результат это сам отчёт; `healthy`\nговорит, прошли ли все проверки. Доступы здесь — только наличие; работают\nли они — `auth status --check`.\n\nExample: wordstat doctor --json",
+        "options": [
+          {
+            "name": "--json",
+            "description": "Машиночитаемый вывод: JSON в stdout.",
+            "metadata": [
+              {
+                "name": "x-rb-type",
+                "value": "boolean"
+              },
+              {
+                "name": "x-rb-default",
+                "value": false
+              }
+            ]
+          },
+          {
+            "name": "--quiet",
+            "description": "Не печатать ничего, кроме данных.",
+            "metadata": [
+              {
+                "name": "x-rb-type",
+                "value": "boolean"
+              },
+              {
+                "name": "x-rb-default",
+                "value": false
+              }
+            ]
+          },
+          {
+            "name": "--verbose",
+            "description": "Подробная диагностика в stderr.",
+            "metadata": [
+              {
+                "name": "x-rb-type",
+                "value": "boolean"
+              },
+              {
+                "name": "x-rb-default",
+                "value": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "search",
+        "description": "Частоты Яндекс.Wordstat и похожие запросы / ассоциации.\n\nКаждая пара (запрос, тип частоты) запрашивается параллельно; провайдеры\nпробуются по порядку из --provider, пока один не ответит. Отказали все →\nPROVIDER_ERROR (exit 5) или AUTH_REQUIRED (exit 3) — частота 0 значит\nтолько «запрос не ищут», не сбой. Похожие запросы и ассоциации приходят с\nтипом broad.\n\nКаждый ответ провайдера пишется в журнал (`wordstat cache`); с --cache\nповторный запрос берётся оттуда бесплатно.\n\n--json: {\"ok\": true, \"count\": N, \"billable_requests_total\": N,\n\"cost_total\": руб., \"results\": [{query, freq_type, total_value, popular:\n[{text, value}], associations: [...], provider, fetched_at, from_cache,\nbillable_requests, cost, cost_source, cost_currency: \"RUB\"}, ...]} (+\n\"saved_to\" при --output).\n\nСтоимость — за каждый платный ответ провайдера. billable_requests —\nсколько их ушло на пару (запрос × тип частоты): один (похожие и\nассоциации — в том же ответе, без страниц; каждый тип частоты — свой\nзапрос); сбои, ответы-ошибки, их повторы и отказавший перед фолбэком\nпровайдер не считаются; из журнала — 0. cost — billable_requests × цена;\ncost_total и billable_requests_total — суммы. cost_source — откуда cost:\n\"provider\" (фактическая из ответа; XML River и XMLStock её не отдают),\n\"price_table\" (цена × billable_requests), \"cache\" (из журнала, 0), null\n(цены нет). Цена — WORDSTAT_<PROVIDER>_PRICE (на\nсервере и в Windmill — только она) или [prices] <провайдер> = 0.0 в\nконфиге проекта. Не задана — cost, cost_source и cost_total null,\nпредупреждение в stderr.\n\n\b\nПримеры:\n  wordstat search \"купить диван\"\n  wordstat search \"купить диван\" --freq all --no-keywords\n  wordstat search \"диван\" \"кресло\" --freq broad,phrase --lr 2\n  wordstat search \"купить диван\" -p xmlstock,xmlriver   # xmlriver — фолбэк\n  wordstat search \"купить диван\" --freq all --output freq.csv\n  wordstat search \"купить диван\" --output keywords.csv --csv-mode keywords\n  wordstat search \"купить диван\" --cache --max-age 7d   # из журнала, если свежее недели\n  wordstat search \"купить диван\" --json\n\nExample: wordstat search \"купить диван\" --freq all --json",
+        "options": [
+          {
+            "name": "--freq",
+            "aliases": [
+              "-f"
+            ],
+            "arguments": [
+              {
+                "name": "FREQ",
+                "required": true
+              }
+            ],
+            "description": "Тип(ы) частоты: broad, phrase, exact, exact-ord, all. Повторять флаг или через запятую.",
+            "metadata": [
+              {
+                "name": "x-rb-type",
+                "value": "str"
+              },
+              {
+                "name": "x-rb-default",
+                "value": [
+                  "broad"
+                ]
+              },
+              {
+                "name": "x-rb-multiple",
+                "value": true
+              }
+            ]
+          },
+          {
+            "name": "--lr",
+            "arguments": [
+              {
+                "name": "LR",
+                "required": true,
+                "arity": {
+                  "maximum": 1
+                }
+              }
+            ],
+            "description": "Код региона Яндекса: 213=Москва, 2=СПб, 35=Краснодар, 65=Новосибирск.",
+            "metadata": [
+              {
+                "name": "x-rb-type",
+                "value": "int"
+              },
+              {
+                "name": "x-rb-default",
+                "value": 213
+              }
+            ]
+          },
+          {
+            "name": "--provider",
+            "aliases": [
+              "-p"
+            ],
+            "arguments": [
+              {
+                "name": "PROVIDER",
+                "required": true,
+                "arity": {
+                  "maximum": 1
+                }
+              }
+            ],
+            "description": "Очередь провайдеров через запятую: первый основной, остальные фолбэки. Доступны: xmlriver (XML River); xmlstock (XMLStock). По умолчанию — `providers` из конфига проекта, иначе xmlriver.",
+            "metadata": [
+              {
+                "name": "x-rb-type",
+                "value": "str"
+              }
+            ]
+          },
+          {
+            "name": "--output",
+            "aliases": [
+              "-o"
+            ],
+            "arguments": [
+              {
+                "name": "OUTPUT_PATH",
+                "required": true,
+                "arity": {
+                  "maximum": 1
+                }
+              }
+            ],
+            "description": "Дополнительно сохранить в файл: .csv — таблица (см. --csv-mode), иначе JSON.",
+            "metadata": [
+              {
+                "name": "x-rb-type",
+                "value": "path"
+              }
+            ]
+          },
+          {
+            "name": "--csv-mode",
+            "arguments": [
+              {
+                "name": "CSV_MODE",
+                "required": true,
+                "arity": {
+                  "maximum": 1
+                },
+                "acceptedValues": [
+                  "auto",
+                  "freq",
+                  "keywords"
+                ]
+              }
+            ],
+            "description": "CSV: freq — query|freq_type|freq_label|operator|total_value; keywords — source_query|type|keyword|value из похожих и ассоциаций (только broad); auto — freq при нескольких типах частоты, иначе keywords.",
+            "metadata": [
+              {
+                "name": "x-rb-type",
+                "value": "choice"
+              },
+              {
+                "name": "x-rb-default",
+                "value": "auto"
+              }
+            ]
+          },
+          {
+            "name": "--no-keywords",
+            "description": "В консоли только частоты, без похожих запросов.",
+            "metadata": [
+              {
+                "name": "x-rb-type",
+                "value": "boolean"
+              },
+              {
+                "name": "x-rb-default",
+                "value": false
+              }
+            ]
+          },
+          {
+            "name": "--cache",
+            "description": "Взять ответ из журнала, если такой запрос (провайдер, тип частоты, регион, текст) уже был — бесплатно. Только ответы провайдеров из --provider, в порядке очереди. Без флага — всегда живой запрос. Ответы пишутся в журнал всегда.",
+            "metadata": [
+              {
+                "name": "x-rb-type",
+                "value": "boolean"
+              },
+              {
+                "name": "x-rb-default",
+                "value": false
+              }
+            ]
+          },
+          {
+            "name": "--max-age",
+            "arguments": [
+              {
+                "name": "MAX_AGE",
+                "required": true,
+                "arity": {
+                  "maximum": 1
+                }
+              }
+            ],
+            "description": "С --cache: брать из журнала, только если запись не старше срока: 30m, 12h, 7d, 2w.",
+            "metadata": [
+              {
+                "name": "x-rb-type",
+                "value": "str"
+              }
+            ]
+          },
+          {
+            "name": "--force",
+            "description": "Всегда живой запрос, даже с --cache; новый ответ станет актуальным.",
+            "metadata": [
+              {
+                "name": "x-rb-type",
+                "value": "boolean"
+              },
+              {
+                "name": "x-rb-default",
+                "value": false
+              }
+            ]
+          },
+          {
+            "name": "--json",
+            "description": "Машиночитаемый вывод: JSON в stdout.",
+            "metadata": [
+              {
+                "name": "x-rb-type",
+                "value": "boolean"
+              },
+              {
+                "name": "x-rb-default",
+                "value": false
+              }
+            ]
+          },
+          {
+            "name": "--quiet",
+            "description": "Не печатать ничего, кроме данных.",
+            "metadata": [
+              {
+                "name": "x-rb-type",
+                "value": "boolean"
+              },
+              {
+                "name": "x-rb-default",
+                "value": false
+              }
+            ]
+          },
+          {
+            "name": "--verbose",
+            "description": "Подробная диагностика в stderr.",
+            "metadata": [
+              {
+                "name": "x-rb-type",
+                "value": "boolean"
+              },
+              {
+                "name": "x-rb-default",
+                "value": false
+              }
+            ]
+          }
+        ],
+        "arguments": [
+          {
+            "name": "queries",
+            "required": true,
+            "arity": {
+              "minimum": 1
+            },
+            "description": "Один или несколько запросов.",
+            "metadata": [
+              {
+                "name": "x-rb-type",
+                "value": "str"
+              },
+              {
+                "name": "x-rb-multiple",
+                "value": true
+              }
+            ]
+          }
+        ]
+      },
+      {
         "name": "init",
-        "description": "Создать проект в папке: .wordstat/config.toml с очередью провайдеров и min_version.\n\nExample: wordstat init --non-interactive",
+        "description": "Создать проект в папке: .wordstat/config.toml с очередью провайдеров и min_version.\n\nExample: wordstat init --name demo",
         "options": [
           {
             "name": "--name",
             "arguments": [
               {
                 "name": "NAME",
-                "required": true
+                "required": true,
+                "arity": {
+                  "maximum": 1
+                }
               }
             ],
             "description": "Имя проекта (по умолчанию — имя папки).",
@@ -251,292 +558,6 @@
         ]
       },
       {
-        "name": "doctor",
-        "description": "Диагностика: версия, проект, настройки, база и её схема, журнал, связка ключей, доступы.\n\nВсегда завершается с кодом 0 — результат это сам отчёт; `healthy`\nговорит, прошли ли все проверки. Доступы здесь — только наличие; работают\nли они — `auth status --check`.\n\nExample: wordstat doctor --json",
-        "options": [
-          {
-            "name": "--json",
-            "description": "Машиночитаемый вывод: JSON в stdout.",
-            "metadata": [
-              {
-                "name": "x-rb-type",
-                "value": "boolean"
-              },
-              {
-                "name": "x-rb-default",
-                "value": false
-              }
-            ]
-          },
-          {
-            "name": "--quiet",
-            "description": "Не печатать ничего, кроме данных.",
-            "metadata": [
-              {
-                "name": "x-rb-type",
-                "value": "boolean"
-              },
-              {
-                "name": "x-rb-default",
-                "value": false
-              }
-            ]
-          },
-          {
-            "name": "--verbose",
-            "description": "Подробная диагностика в stderr.",
-            "metadata": [
-              {
-                "name": "x-rb-type",
-                "value": "boolean"
-              },
-              {
-                "name": "x-rb-default",
-                "value": false
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "name": "search",
-        "description": "Частоты Яндекс.Wordstat и похожие запросы / ассоциации.\n\nКаждая пара (запрос, тип частоты) запрашивается параллельно; провайдеры\nпробуются по порядку из --provider, пока один не ответит. Отказали все →\nPROVIDER_ERROR (exit 5) или AUTH_REQUIRED (exit 3) — частота 0 значит\nтолько «запрос не ищут», не сбой. Похожие запросы и ассоциации приходят с\nтипом broad.\n\nКаждый ответ провайдера пишется в журнал (`wordstat cache`); с --cache\nповторный запрос берётся оттуда бесплатно.\n\n--json: {\"ok\": true, \"count\": N, \"billable_requests_total\": N,\n\"cost_total\": руб., \"results\": [{query, freq_type, total_value, popular:\n[{text, value}], associations: [...], provider, fetched_at, from_cache,\nbillable_requests, cost, cost_source, cost_currency: \"RUB\"}, ...]} (+\n\"saved_to\" при --output).\n\nСтоимость — за каждый платный ответ провайдера. billable_requests —\nсколько их ушло на пару (запрос × тип частоты): один (похожие и\nассоциации — в том же ответе, без страниц; каждый тип частоты — свой\nзапрос); сбои, ответы-ошибки, их повторы и отказавший перед фолбэком\nпровайдер не считаются; из журнала — 0. cost — billable_requests × цена;\ncost_total и billable_requests_total — суммы. cost_source — откуда cost:\n\"provider\" (фактическая из ответа; XML River и XMLStock её не отдают),\n\"price_table\" (цена × billable_requests), \"cache\" (из журнала, 0), null\n(цены нет). Цена — WORDSTAT_<PROVIDER>_PRICE (на\nсервере и в Windmill — только она) или [prices] <провайдер> = 0.0 в\nконфиге проекта. Не задана — cost, cost_source и cost_total null,\nпредупреждение в stderr.\n\n\b\nПримеры:\n  wordstat search \"купить диван\"\n  wordstat search \"купить диван\" --freq all --no-keywords\n  wordstat search \"диван\" \"кресло\" --freq broad,phrase --lr 2\n  wordstat search \"купить диван\" -p xmlstock,xmlriver   # xmlriver — фолбэк\n  wordstat search \"купить диван\" --freq all --output freq.csv\n  wordstat search \"купить диван\" --output keywords.csv --csv-mode keywords\n  wordstat search \"купить диван\" --cache --max-age 7d   # из журнала, если свежее недели\n  wordstat search \"купить диван\" --json\n\nExample: wordstat search \"купить диван\" --freq all --json",
-        "options": [
-          {
-            "name": "--freq",
-            "aliases": [
-              "-f"
-            ],
-            "arguments": [
-              {
-                "name": "FREQ",
-                "required": true
-              }
-            ],
-            "description": "Тип(ы) частоты: broad, phrase, exact, exact-ord, all. Повторять флаг или через запятую.",
-            "metadata": [
-              {
-                "name": "x-rb-type",
-                "value": "str"
-              },
-              {
-                "name": "x-rb-default",
-                "value": [
-                  "broad"
-                ]
-              },
-              {
-                "name": "x-rb-multiple",
-                "value": true
-              }
-            ]
-          },
-          {
-            "name": "--lr",
-            "arguments": [
-              {
-                "name": "LR",
-                "required": true
-              }
-            ],
-            "description": "Код региона Яндекса: 213=Москва, 2=СПб, 35=Краснодар, 65=Новосибирск.",
-            "metadata": [
-              {
-                "name": "x-rb-type",
-                "value": "int"
-              },
-              {
-                "name": "x-rb-default",
-                "value": 213
-              }
-            ]
-          },
-          {
-            "name": "--provider",
-            "aliases": [
-              "-p"
-            ],
-            "arguments": [
-              {
-                "name": "PROVIDER",
-                "required": true
-              }
-            ],
-            "description": "Очередь провайдеров через запятую: первый основной, остальные фолбэки. Доступны: xmlriver (XML River); xmlstock (XMLStock). По умолчанию — `providers` из конфига проекта, иначе xmlriver.",
-            "metadata": [
-              {
-                "name": "x-rb-type",
-                "value": "str"
-              }
-            ]
-          },
-          {
-            "name": "--output",
-            "aliases": [
-              "-o"
-            ],
-            "arguments": [
-              {
-                "name": "OUTPUT_PATH",
-                "required": true
-              }
-            ],
-            "description": "Дополнительно сохранить в файл: .csv — таблица (см. --csv-mode), иначе JSON.",
-            "metadata": [
-              {
-                "name": "x-rb-type",
-                "value": "path"
-              }
-            ]
-          },
-          {
-            "name": "--csv-mode",
-            "arguments": [
-              {
-                "name": "CSV_MODE",
-                "required": true,
-                "acceptedValues": [
-                  "auto",
-                  "freq",
-                  "keywords"
-                ]
-              }
-            ],
-            "description": "CSV: freq — query|freq_type|freq_label|operator|total_value; keywords — source_query|type|keyword|value из похожих и ассоциаций (только broad); auto — freq при нескольких типах частоты, иначе keywords.",
-            "metadata": [
-              {
-                "name": "x-rb-type",
-                "value": "choice"
-              },
-              {
-                "name": "x-rb-default",
-                "value": "auto"
-              }
-            ]
-          },
-          {
-            "name": "--no-keywords",
-            "description": "В консоли только частоты, без похожих запросов.",
-            "metadata": [
-              {
-                "name": "x-rb-type",
-                "value": "boolean"
-              },
-              {
-                "name": "x-rb-default",
-                "value": false
-              }
-            ]
-          },
-          {
-            "name": "--cache",
-            "description": "Взять ответ из журнала, если такой запрос (провайдер, тип частоты, регион, текст) уже был — бесплатно. Только ответы провайдеров из --provider, в порядке очереди. Без флага — всегда живой запрос. Ответы пишутся в журнал всегда.",
-            "metadata": [
-              {
-                "name": "x-rb-type",
-                "value": "boolean"
-              },
-              {
-                "name": "x-rb-default",
-                "value": false
-              }
-            ]
-          },
-          {
-            "name": "--max-age",
-            "arguments": [
-              {
-                "name": "MAX_AGE",
-                "required": true
-              }
-            ],
-            "description": "С --cache: брать из журнала, только если запись не старше срока: 30m, 12h, 7d, 2w.",
-            "metadata": [
-              {
-                "name": "x-rb-type",
-                "value": "str"
-              }
-            ]
-          },
-          {
-            "name": "--force",
-            "description": "Всегда живой запрос, даже с --cache; новый ответ станет актуальным.",
-            "metadata": [
-              {
-                "name": "x-rb-type",
-                "value": "boolean"
-              },
-              {
-                "name": "x-rb-default",
-                "value": false
-              }
-            ]
-          },
-          {
-            "name": "--json",
-            "description": "Машиночитаемый вывод: JSON в stdout.",
-            "metadata": [
-              {
-                "name": "x-rb-type",
-                "value": "boolean"
-              },
-              {
-                "name": "x-rb-default",
-                "value": false
-              }
-            ]
-          },
-          {
-            "name": "--quiet",
-            "description": "Не печатать ничего, кроме данных.",
-            "metadata": [
-              {
-                "name": "x-rb-type",
-                "value": "boolean"
-              },
-              {
-                "name": "x-rb-default",
-                "value": false
-              }
-            ]
-          },
-          {
-            "name": "--verbose",
-            "description": "Подробная диагностика в stderr.",
-            "metadata": [
-              {
-                "name": "x-rb-type",
-                "value": "boolean"
-              },
-              {
-                "name": "x-rb-default",
-                "value": false
-              }
-            ]
-          }
-        ],
-        "arguments": [
-          {
-            "name": "queries",
-            "required": true,
-            "arity": {
-              "minimum": 1
-            },
-            "description": "Один или несколько запросов.",
-            "metadata": [
-              {
-                "name": "x-rb-type",
-                "value": "str"
-              },
-              {
-                "name": "x-rb-multiple",
-                "value": true
-              }
-            ]
-          }
-        ]
-      },
-      {
         "name": "describe",
         "description": "Print this CLI's machine-readable contract: an OpenCLI document (opencli.org).\n\nCommands, options, arguments, exit codes, plus `x-rb-*` metadata: env vars,\ntables, v1 views, data files, external programs. With --json it is the bare\ndocument on one line (no {\"ok\": ...} envelope); without, the same indented.\n\nExample: wordstat describe --json",
         "options": [
@@ -579,6 +600,438 @@
               {
                 "name": "x-rb-default",
                 "value": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "auth",
+        "description": "Доступы к провайдерам: проверка и хранение в связке ключей ОС.",
+        "commands": [
+          {
+            "name": "status",
+            "description": "Report every provider's credential: where it comes from and whether it works. Never prints values.\n\nWithout --check only presence is reported (status `unchecked` or `missing`).\nExits 0 when every required provider is ok/unchecked (an optional one may be\nmissing), 3 when any required provider has a problem or any credential is\ninvalid/expired, 2 on a usage error. A per-target provider (one credential per\nsite/host/account) gets one entry per stored target, named `<kind>:<target>`. The --json shape is a cross-tool contract:\n`tool`, `version`, `checked_at`, `credentials[]` with `provider`, `required`,\n`fields`, `source`, `source_ref`, `status`, `expires_at`, `quota`, `message`.\n\nExample: wordstat auth status --check --json",
+            "options": [
+              {
+                "name": "--check",
+                "description": "Also make one cheap read-only call per provider (10 s timeout) to prove each works.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              },
+              {
+                "name": "--provider",
+                "arguments": [
+                  {
+                    "name": "PROVIDER",
+                    "required": true,
+                    "arity": {
+                      "maximum": 1
+                    }
+                  }
+                ],
+                "description": "Report only this provider, or one target as <kind>:<target> (default: all).",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "str"
+                  }
+                ]
+              },
+              {
+                "name": "--json",
+                "description": "Машиночитаемый вывод: JSON в stdout.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              },
+              {
+                "name": "--quiet",
+                "description": "Не печатать ничего, кроме данных.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "login",
+            "description": "Сохранить доступы провайдера в связку ключей ОС.\n\nКаждое поле берётся из переменной WORDSTAT_<PROVIDER>_<FIELD> (например\nWORDSTAT_XMLSTOCK_USER, WORDSTAT_XMLSTOCK_TOKEN), если она задана, иначе\nспрашивается. С --non-interactive недостающее поле — ошибка, а не вопрос.\n\nExample: wordstat auth login --provider xmlstock",
+            "options": [
+              {
+                "name": "--provider",
+                "arguments": [
+                  {
+                    "name": "PROVIDER",
+                    "required": true,
+                    "arity": {
+                      "maximum": 1
+                    }
+                  }
+                ],
+                "description": "Провайдер. Доступны: xmlriver (XML River); xmlstock (XMLStock).",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "str"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": "xmlriver"
+                  }
+                ]
+              },
+              {
+                "name": "--non-interactive",
+                "description": "Никогда не спрашивать; при нехватке данных — ошибка.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              },
+              {
+                "name": "--json",
+                "description": "Машиночитаемый вывод: JSON в stdout.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              },
+              {
+                "name": "--quiet",
+                "description": "Не печатать ничего, кроме данных.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "logout",
+            "description": "Удалить доступы провайдера из связки ключей ОС (записи serp не трогаются).\n\nExample: wordstat auth logout --provider xmlstock",
+            "options": [
+              {
+                "name": "--provider",
+                "arguments": [
+                  {
+                    "name": "PROVIDER",
+                    "required": true,
+                    "arity": {
+                      "maximum": 1
+                    }
+                  }
+                ],
+                "description": "Провайдер. Доступны: xmlriver (XML River); xmlstock (XMLStock).",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "str"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": "xmlriver"
+                  }
+                ]
+              },
+              {
+                "name": "--json",
+                "description": "Машиночитаемый вывод: JSON в stdout.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              },
+              {
+                "name": "--quiet",
+                "description": "Не печатать ничего, кроме данных.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "cache",
+        "description": "Журнал всех ответов провайдеров (он же кэш для --cache).\n\nЖурнал ответов: /nonexistent/wordstat-journal/wordstat.db — пока пуст.",
+        "commands": [
+          {
+            "name": "info",
+            "description": "Размер журнала, число записей, самая старая и новая, разбивка по провайдерам.\n\nExample: wordstat cache info --json",
+            "options": [
+              {
+                "name": "--json",
+                "description": "Машиночитаемый вывод: JSON в stdout.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              },
+              {
+                "name": "--quiet",
+                "description": "Не печатать ничего, кроме данных.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "list",
+            "description": "Последние записи журнала (без самих ответов), свежие первыми.\n\n--json: {\"ok\": true, \"count\": N, \"results\": [{id, fetched_at, provider,\nfreq_type, region, query, total_value, size}, ...]}; size — сжатый размер\nответа.\n\nExample: wordstat cache list --query диван --limit 20",
+            "options": [
+              {
+                "name": "--query",
+                "aliases": [
+                  "-q"
+                ],
+                "arguments": [
+                  {
+                    "name": "QUERY",
+                    "required": true,
+                    "arity": {
+                      "maximum": 1
+                    }
+                  }
+                ],
+                "description": "Только записи, где запрос содержит этот текст.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "str"
+                  }
+                ]
+              },
+              {
+                "name": "--limit",
+                "aliases": [
+                  "-n"
+                ],
+                "arguments": [
+                  {
+                    "name": "LIMIT",
+                    "required": true,
+                    "arity": {
+                      "maximum": 1
+                    }
+                  }
+                ],
+                "description": "Сколько последних записей показать.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "int range"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": 50
+                  }
+                ]
+              },
+              {
+                "name": "--json",
+                "description": "Машиночитаемый вывод: JSON в stdout.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              },
+              {
+                "name": "--quiet",
+                "description": "Не печатать ничего, кроме данных.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "clear",
+            "description": "Удалить записи журнала: старше срока (--older-than) или все (--all).\n\nНеобратимо: сначала --dry-run (покажет, сколько удалится), затем\n--confirm (обязателен вместе с --non-interactive).\n\n--json: {\"ok\": true, \"deleted\": N} (при --dry-run — {\"dry_run\": true,\n\"would_delete\": N}).\n\nExample: wordstat cache clear --older-than 30d --dry-run",
+            "options": [
+              {
+                "name": "--older-than",
+                "arguments": [
+                  {
+                    "name": "OLDER_THAN",
+                    "required": true,
+                    "arity": {
+                      "maximum": 1
+                    }
+                  }
+                ],
+                "description": "Удалить записи старше срока: 30m, 12h, 7d, 2w.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "str"
+                  }
+                ]
+              },
+              {
+                "name": "--all",
+                "description": "Удалить весь журнал.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              },
+              {
+                "name": "--dry-run",
+                "description": "Показать, что будет сделано, ничего не меняя.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              },
+              {
+                "name": "--confirm",
+                "description": "Подтвердить необратимое действие (обязательно вместе с --non-interactive).",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              },
+              {
+                "name": "--non-interactive",
+                "description": "Никогда не спрашивать; при нехватке данных — ошибка.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              },
+              {
+                "name": "--json",
+                "description": "Машиночитаемый вывод: JSON в stdout.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
+              },
+              {
+                "name": "--quiet",
+                "description": "Не печатать ничего, кроме данных.",
+                "metadata": [
+                  {
+                    "name": "x-rb-type",
+                    "value": "boolean"
+                  },
+                  {
+                    "name": "x-rb-default",
+                    "value": false
+                  }
+                ]
               }
             ]
           }
@@ -742,211 +1195,22 @@
         ]
       },
       {
-        "name": "auth",
-        "description": "Доступы к провайдерам: проверка и хранение в связке ключей ОС.",
-        "commands": [
-          {
-            "name": "status",
-            "description": "Report every provider's credential: where it comes from and whether it works. Never prints values.\n\nWithout --check only presence is reported (status `unchecked` or `missing`).\nExits 0 when every required provider is ok/unchecked (an optional one may be\nmissing), 3 when any required provider has a problem or any credential is\ninvalid/expired, 2 on a usage error. A per-target provider (one credential per\nsite/host/account) gets one entry per stored target, named `<kind>:<target>`. The --json shape is a cross-tool contract:\n`tool`, `version`, `checked_at`, `credentials[]` with `provider`, `required`,\n`fields`, `source`, `source_ref`, `status`, `expires_at`, `quota`, `message`.\n\nExample: wordstat auth status --check --json",
-            "options": [
-              {
-                "name": "--check",
-                "description": "Also make one cheap read-only call per provider (10 s timeout) to prove each works.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "boolean"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": false
-                  }
-                ]
-              },
-              {
-                "name": "--provider",
-                "arguments": [
-                  {
-                    "name": "PROVIDER",
-                    "required": true
-                  }
-                ],
-                "description": "Report only this provider, or one target as <kind>:<target> (default: all).",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "str"
-                  }
-                ]
-              },
-              {
-                "name": "--json",
-                "description": "Машиночитаемый вывод: JSON в stdout.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "boolean"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": false
-                  }
-                ]
-              },
-              {
-                "name": "--quiet",
-                "description": "Не печатать ничего, кроме данных.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "boolean"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": false
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "name": "login",
-            "description": "Сохранить доступы провайдера в связку ключей ОС.\n\nКаждое поле берётся из переменной WORDSTAT_<PROVIDER>_<FIELD> (например\nWORDSTAT_XMLSTOCK_USER, WORDSTAT_XMLSTOCK_TOKEN), если она задана, иначе\nспрашивается. С --non-interactive недостающее поле — ошибка, а не вопрос.\n\nExample: wordstat auth login --provider xmlstock",
-            "options": [
-              {
-                "name": "--provider",
-                "arguments": [
-                  {
-                    "name": "PROVIDER",
-                    "required": true
-                  }
-                ],
-                "description": "Провайдер. Доступны: xmlriver (XML River); xmlstock (XMLStock).",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "str"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": "xmlriver"
-                  }
-                ]
-              },
-              {
-                "name": "--non-interactive",
-                "description": "Никогда не спрашивать; при нехватке данных — ошибка.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "boolean"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": false
-                  }
-                ]
-              },
-              {
-                "name": "--json",
-                "description": "Машиночитаемый вывод: JSON в stdout.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "boolean"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": false
-                  }
-                ]
-              },
-              {
-                "name": "--quiet",
-                "description": "Не печатать ничего, кроме данных.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "boolean"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": false
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "name": "logout",
-            "description": "Удалить доступы провайдера из связки ключей ОС (записи serp не трогаются).\n\nExample: wordstat auth logout --provider xmlstock",
-            "options": [
-              {
-                "name": "--provider",
-                "arguments": [
-                  {
-                    "name": "PROVIDER",
-                    "required": true
-                  }
-                ],
-                "description": "Провайдер. Доступны: xmlriver (XML River); xmlstock (XMLStock).",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "str"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": "xmlriver"
-                  }
-                ]
-              },
-              {
-                "name": "--json",
-                "description": "Машиночитаемый вывод: JSON в stdout.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "boolean"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": false
-                  }
-                ]
-              },
-              {
-                "name": "--quiet",
-                "description": "Не печатать ничего, кроме данных.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "boolean"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": false
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      {
         "name": "skill",
         "description": "Памятка wordstat для AI-агентов.",
         "commands": [
           {
             "name": "install",
-            "description": "Скопировать памятку SKILL.md в папку навыков AI-инструмента.\n\nExample: wordstat skill install --tool claude-code",
+            "description": "Copy this CLI's bundled skills into an AI tool's skill directory.\n\nThe conventions skill and every extra skill the package ships, each into its own directory.\n\nExample: wordstat skill install --tool claude-code",
             "options": [
               {
                 "name": "--tool",
                 "arguments": [
                   {
                     "name": "TOOL",
-                    "required": true
+                    "required": true,
+                    "arity": {
+                      "maximum": 1
+                    }
                   }
                 ],
                 "description": "Для какого AI-инструмента: claude-code, agents.",
@@ -976,45 +1240,24 @@
                 ]
               },
               {
-                "name": "--json",
-                "description": "Машиночитаемый вывод: JSON в stdout.",
+                "name": "--skill",
+                "arguments": [
+                  {
+                    "name": "SKILL",
+                    "required": true,
+                    "arity": {
+                      "maximum": 1
+                    }
+                  }
+                ],
+                "description": "Install only this bundled skill (see `skill list`); by default all.",
                 "metadata": [
                   {
                     "name": "x-rb-type",
-                    "value": "boolean"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": false
+                    "value": "str"
                   }
                 ]
               },
-              {
-                "name": "--quiet",
-                "description": "Не печатать ничего, кроме данных.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "boolean"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": false
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "name": "cache",
-        "description": "Журнал всех ответов провайдеров (он же кэш для --cache).\n\nЖурнал ответов: /nonexistent/wordstat-journal/wordstat.db — пока пуст.",
-        "commands": [
-          {
-            "name": "info",
-            "description": "Размер журнала, число записей, самая старая и новая, разбивка по провайдерам.\n\nExample: wordstat cache info --json",
-            "options": [
               {
                 "name": "--json",
                 "description": "Машиночитаемый вывод: JSON в stdout.",
@@ -1047,156 +1290,8 @@
           },
           {
             "name": "list",
-            "description": "Последние записи журнала (без самих ответов), свежие первыми.\n\n--json: {\"ok\": true, \"count\": N, \"results\": [{id, fetched_at, provider,\nfreq_type, region, query, total_value, size}, ...]}; size — сжатый размер\nответа.\n\nExample: wordstat cache list --query диван --limit 20",
+            "description": "List the agent skills this CLI bundles: name and description.\n\nExample: wordstat skill list",
             "options": [
-              {
-                "name": "--query",
-                "aliases": [
-                  "-q"
-                ],
-                "arguments": [
-                  {
-                    "name": "QUERY",
-                    "required": true
-                  }
-                ],
-                "description": "Только записи, где запрос содержит этот текст.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "str"
-                  }
-                ]
-              },
-              {
-                "name": "--limit",
-                "aliases": [
-                  "-n"
-                ],
-                "arguments": [
-                  {
-                    "name": "LIMIT",
-                    "required": true
-                  }
-                ],
-                "description": "Сколько последних записей показать.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "int range"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": 50
-                  }
-                ]
-              },
-              {
-                "name": "--json",
-                "description": "Машиночитаемый вывод: JSON в stdout.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "boolean"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": false
-                  }
-                ]
-              },
-              {
-                "name": "--quiet",
-                "description": "Не печатать ничего, кроме данных.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "boolean"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": false
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "name": "clear",
-            "description": "Удалить записи журнала: старше срока (--older-than) или все (--all).\n\nНеобратимо: сначала --dry-run (покажет, сколько удалится), затем\n--confirm (обязателен вместе с --non-interactive).\n\n--json: {\"ok\": true, \"deleted\": N} (при --dry-run — {\"dry_run\": true,\n\"would_delete\": N}).\n\nExample: wordstat cache clear --older-than 30d --dry-run",
-            "options": [
-              {
-                "name": "--older-than",
-                "arguments": [
-                  {
-                    "name": "OLDER_THAN",
-                    "required": true
-                  }
-                ],
-                "description": "Удалить записи старше срока: 30m, 12h, 7d, 2w.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "str"
-                  }
-                ]
-              },
-              {
-                "name": "--all",
-                "description": "Удалить весь журнал.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "boolean"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": false
-                  }
-                ]
-              },
-              {
-                "name": "--dry-run",
-                "description": "Показать, что будет сделано, ничего не меняя.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "boolean"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": false
-                  }
-                ]
-              },
-              {
-                "name": "--confirm",
-                "description": "Подтвердить необратимое действие (обязательно вместе с --non-interactive).",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "boolean"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": false
-                  }
-                ]
-              },
-              {
-                "name": "--non-interactive",
-                "description": "Никогда не спрашивать; при нехватке данных — ошибка.",
-                "metadata": [
-                  {
-                    "name": "x-rb-type",
-                    "value": "boolean"
-                  },
-                  {
-                    "name": "x-rb-default",
-                    "value": false
-                  }
-                ]
-              },
               {
                 "name": "--json",
                 "description": "Машиночитаемый вывод: JSON в stdout.",
@@ -1409,7 +1504,10 @@
                 "arguments": [
                   {
                     "name": "SINCE",
-                    "required": true
+                    "required": true,
+                    "arity": {
+                      "maximum": 1
+                    }
                   }
                 ],
                 "description": "Only rows created at or after this date/time.",
@@ -1425,7 +1523,10 @@
                 "arguments": [
                   {
                     "name": "WHERE",
-                    "required": true
+                    "required": true,
+                    "arity": {
+                      "maximum": 1
+                    }
                   }
                 ],
                 "description": "Extra SQL condition on the local table, e.g. \"region = 213\".",
@@ -1609,6 +1710,7 @@
           "tables": [
             {
               "name": "wordstat_responses",
+              "schema": "public",
               "kind": "cache",
               "columns": [
                 {
@@ -1719,6 +1821,15 @@
       {
         "name": "x-rb-external",
         "value": []
+      },
+      {
+        "name": "x-rb-skills",
+        "value": [
+          {
+            "name": "wordstat",
+            "description": "Частоты Яндекс.Wordstat (базовая, фразовая, точная, точная с порядком) и похожие запросы / ассоциации по региону через CLI `wordstat` — провайдеры XML River и XMLStock с фолбэком. Использовать, когда задаче нужна частотность запросов, сбор семантики, похожие запросы из Вордстата (Wordstat, search volume, keyword frequency, semantic core). Здесь — установка, --json, коды выхода, доступы."
+          }
+        ]
       }
     ]
   }

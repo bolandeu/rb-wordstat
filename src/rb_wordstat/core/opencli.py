@@ -12,7 +12,7 @@ programs and template version.
 
 The output is a cross-tool contract like `auth status`: tests/test_describe.py
 validates it against the OpenCLI schema and snapshots it. Changing or removing
-anything in it is a breaking change (conventions.md).
+anything in it is a breaking change.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ import platformdirs
 from .._distribution import DIST_NAME, TEMPLATE_VERSION, TOOL
 from . import data_files, deps
 from .errors import EXIT_CODES
-from .version import DEV_VERSION, cli_name, installed_version, module_exists, package_summary
+from .version import DEV_VERSION, cli_name, installed_version, module_exists, optional_module, package_summary
 
 OPENCLI_VERSION = "0.1"
 _PACKAGE_NAME = __name__.split(".")[0]
@@ -51,22 +51,34 @@ def document(root: Any) -> dict:
             "x-rb-env": env_vars(),
             "x-rb-data": data(),
             "x-rb-external": [asdict(spec) for spec in deps.declared().values()],
+            "x-rb-skills": _bundled_skills(),
         }
     )
-    info = {"title": cli_name(), "version": installed_version() or DEV_VERSION}
+    return {"opencli": OPENCLI_VERSION, "info": info(), "command": command}
+
+
+def _bundled_skills() -> list[dict]:
+    """The agent skills the package ships (the package skill part, copier's include_skill); none without it."""
+    skills = optional_module(f"{_PACKAGE_NAME}.core.skills")
+    return [{"name": s.name, "description": s.description} for s in skills.bundled()] if skills else []
+
+
+def info() -> dict:
+    """The `info` of the document: the name of the CLI, its version and its summary."""
+    found = {"title": cli_name(), "version": installed_version() or DEV_VERSION}
     if summary := package_summary():
-        info["summary"] = summary
-    return {"opencli": OPENCLI_VERSION, "info": info, "command": command}
+        found["summary"] = summary
+    return found
 
 
 def _command(name: str, cmd: Any) -> dict:
     out: dict[str, Any] = {"name": name}
-    if description := _text(cmd.help):
+    if description := cleaned(cmd.help):
         out["description"] = description
     if cmd.hidden:
         out["hidden"] = True
-    options = [_option(p) for p in cmd.params if p.param_type_name == "option"]
-    arguments = [_argument(p) for p in cmd.params if p.param_type_name == "argument"]
+    options = [option(p) for p in cmd.params if p.param_type_name == "option"]
+    arguments = [argument(p) for p in cmd.params if p.param_type_name == "argument"]
     if options:
         out["options"] = options
     if arguments:
@@ -77,7 +89,8 @@ def _command(name: str, cmd: Any) -> dict:
     return out
 
 
-def _option(param: Any) -> dict:
+def option(param: Any) -> dict:
+    """The OpenCLI entry of a Click option."""
     names = sorted(param.opts, key=len, reverse=True)  # the long form is the name
     out: dict[str, Any] = {"name": names[0]}
     if aliases := [*names[1:], *param.secondary_opts]:
@@ -85,11 +98,13 @@ def _option(param: Any) -> dict:
     if param.required:
         out["required"] = True
     if not param.is_flag and not param.count:
-        value = {"name": param.metavar or (param.name or "value").upper(), "required": True}
+        value: dict[str, Any] = {"name": param.metavar or (param.name or "value").upper(), "required": True}
+        if not param.multiple:
+            value["arity"] = {"maximum": 1}
         if choices := _choices(param.type):
             value["acceptedValues"] = choices
         out["arguments"] = [value]
-    if description := _text(param.help):
+    if description := cleaned(param.help):
         out["description"] = description
     if param.hidden:
         out["hidden"] = True
@@ -97,7 +112,8 @@ def _option(param: Any) -> dict:
     return out
 
 
-def _argument(param: Any) -> dict:
+def argument(param: Any) -> dict:
+    """The OpenCLI entry of a Click argument."""
     out: dict[str, Any] = {"name": param.name or "argument"}
     out["required"] = param.required
     maximum = None if param.nargs == -1 else param.nargs
@@ -106,7 +122,7 @@ def _argument(param: Any) -> dict:
         out["arity"]["maximum"] = maximum
     if choices := _choices(param.type):
         out["acceptedValues"] = choices
-    if description := _text(getattr(param, "help", None)):  # Typer's arguments carry help
+    if description := cleaned(getattr(param, "help", None)):  # Typer's arguments carry help
         out["description"] = description
     if getattr(param, "hidden", False):
         out["hidden"] = True
@@ -118,7 +134,7 @@ def _param_meta(param: Any, *, multiple: bool) -> list[dict]:
     meta: dict[str, Any] = {"x-rb-type": param.type.name}
     default = param.default
     if default is not None and not callable(default) and default != ():
-        meta["x-rb-default"] = _jsonable(default)
+        meta["x-rb-default"] = jsonable(default)
     if multiple:
         meta["x-rb-multiple"] = True
     return _meta(meta)
@@ -126,16 +142,16 @@ def _param_meta(param: Any, *, multiple: bool) -> list[dict]:
 
 def _choices(param_type: Any) -> list[str] | None:
     choices = getattr(param_type, "choices", None)  # a Choice (or an Enum Typer turned into one)
-    return [str(_jsonable(choice)) for choice in choices] if choices else None
+    return [str(jsonable(choice)) for choice in choices] if choices else None
 
 
-def _jsonable(value: Any) -> Any:
+def jsonable(value: Any) -> Any:
     if isinstance(value, enum.Enum):
         return value.value
     if isinstance(value, PurePath):
         return str(value)
     if isinstance(value, (list, tuple)):
-        return [_jsonable(item) for item in value]
+        return [jsonable(item) for item in value]
     try:
         json.dumps(value)
     except TypeError:
@@ -143,7 +159,8 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
-def _text(text: str | None) -> str:
+def cleaned(text: str | None) -> str:
+    """A help text as the docstring wrote it."""
     # output.guard escaped `[` for Typer's rich markup; the document wants the docstring itself.
     return inspect.cleandoc(text or "").replace("\\[", "[").strip()
 
@@ -200,6 +217,7 @@ def data() -> dict:
         out["tables"] = [
             {
                 "name": table.name,
+                "schema": table.schema or "public",
                 "kind": table.info.get("kind"),
                 **({"description": table.comment} if table.comment else {}),
                 "columns": [

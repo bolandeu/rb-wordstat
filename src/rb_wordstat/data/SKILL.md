@@ -13,22 +13,21 @@ description: Частоты Яндекс.Wordstat (базовая, фразов�
 ## Установка (если `wordstat --version` не работает)
 
 ```bash
-uv tool install "rb-wordstat @ git+https://github.com/bolandeu/wordstat.git@vX.Y.Z"
+uv tool install rb-wordstat --index https://homeserver.tailee01ab.ts.net:3000/api/packages/bolandeu/pypi/simple
 ```
+
+Из git-тега:
+
+```bash
+uv tool install "rb-wordstat @ git+https://homeserver.tailee01ab.ts.net:3000/bolandeu/wordstat.git@vX.Y.Z"
+```
+
+`vX.Y.Z` — последний тег релиза (ставить из тега, не из ветки:
+[Стандарт](https://homeserver.tailee01ab.ts.net:3000/bolandeu/cli-generator/src/branch/main/skills/cli-builder/reference/standard.md), Install).
 
 Одинаково на macOS, Linux и Windows; обновление — `uv tool upgrade rb-wordstat`
 (пакет называется `rb-wordstat`, команда — `wordstat`). Не запускать из
 исходников, если не просили разрабатывать сам CLI.
-
-Репозиторий приватный. При ошибке авторизации (`Authentication failed`,
-`could not read Username`, `Repository not found`) токен не спрашивать:
-выполнить `gh auth status`; если проходит — `gh auth setup-git` и повторить;
-если нет — попросить пользователя выполнить `gh auth login`. С настроенными
-SSH-ключами работает и так:
-
-```bash
-uv tool install "rb-wordstat @ git+ssh://git@github.com/bolandeu/wordstat.git@vX.Y.Z"
-```
 
 ## Правила
 

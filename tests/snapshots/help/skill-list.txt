@@ -1,0 +1,13 @@
+
+ Usage: wordstat skill list [OPTIONS]
+
+ List the agent skills this CLI bundles: name and description.
+
+ Example: wordstat skill list
+
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --json           Машиночитаемый вывод: JSON в stdout.                                            │
+│ --quiet          Не печатать ничего, кроме данных.                                               │
+│ --help           Show this message and exit.                                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

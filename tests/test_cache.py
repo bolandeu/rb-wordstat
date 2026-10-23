@@ -14,7 +14,7 @@ from rb_wordstat.core.cache import ResponseCache, default_path, help_line, human
 from rb_wordstat.core.errors import InvalidArguments
 from rb_wordstat.core.models import FreqType
 
-from .test_cli import invoke, invoke_json
+from .test_cli import invoke, invoke_json, plain
 from .test_search import FakeProvider
 
 
@@ -139,17 +139,17 @@ def test_search_cache_flags(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_cache_commands() -> None:
     code, info = invoke_json("cache", "info")
     assert code == 0 and info["entries"] == 0
-    assert "Журнал пуст" in invoke("cache", "list").stdout
+    assert "Журнал пуст" in plain(invoke("cache", "list").stdout)
 
     journal = ResponseCache()
     put(journal, query="диван")
     put(journal, query="кресло")
 
-    human = invoke("cache", "info").stdout
+    human = plain(invoke("cache", "info").stdout)
     assert "записей: 2" in human and "a: 2" in human
     code, listed = invoke_json("cache", "list", "-q", "диван")
     assert (code, listed["count"], listed["results"][0]["query"]) == (0, 1, "диван")
-    assert "кресло" in invoke("cache", "list").stdout
+    assert "кресло" in plain(invoke("cache", "list").stdout)
 
     code, err = invoke_json("cache", "clear")
     assert code == 2 and err["error"]["code"] == "INVALID_ARGUMENTS"
@@ -160,8 +160,8 @@ def test_cache_commands() -> None:
 
     code, done = invoke_json("--non-interactive", "cache", "clear", "--older-than", "1d", "--confirm")
     assert done["deleted"] == 0
-    assert "Удалено записей: 2" in invoke("cache", "clear", "--all", "--confirm").stdout
-    assert "Будет удалено: 0" in invoke("--dry-run", "cache", "clear", "--all").stdout
+    assert "Удалено записей: 2" in plain(invoke("cache", "clear", "--all", "--confirm").stdout)
+    assert "Будет удалено: 0" in plain(invoke("--dry-run", "cache", "clear", "--all").stdout)
 
 
 def test_doctor_reports_cache(_local_database: Path) -> None:

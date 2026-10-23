@@ -10,7 +10,7 @@
 
  Example: wordstat db push --since 2026-10-01 --dry-run
 
-╭─ Параметры ──────────────────────────────────────────────────────────────────────────────────────╮
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
 │ --table          <str>                                   Only this push table (repeatable;       │
 │                                                          default: all of them).                  │
 │ --since          <%Y-%m-%d|%Y-%m-%dT%H:%M:%S|%Y-%m-%d    Only rows created at or after this      │

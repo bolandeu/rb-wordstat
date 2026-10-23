@@ -28,6 +28,7 @@ import sqlalchemy as sa
 from .._distribution import TOOL
 
 PREFIX = f"{TOOL}_"
+CACHE_SCHEMA = "cache"  # where a cache table would live in PostgreSQL (the Standard, Database); wordstat keeps its journal in public
 
 # Deterministic constraint names: a later migration can drop or alter them by name
 # on both PostgreSQL and SQLite (batch mode); they start with the (prefixed) table name.

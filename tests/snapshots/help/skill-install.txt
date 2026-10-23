@@ -1,14 +1,17 @@
 
  Usage: wordstat skill install [OPTIONS]
 
- Скопировать памятку SKILL.md в папку навыков AI-инструмента.
+ Copy this CLI's bundled skills into an AI tool's skill directory.
+
+ The conventions skill and every extra skill the package ships, each into its own directory.
 
  Example: wordstat skill install --tool claude-code
 
-╭─ Параметры ──────────────────────────────────────────────────────────────────────────────────────╮
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
 │ --tool           <str>  Для какого AI-инструмента: claude-code, agents.                          │
 │                         [по умолчанию: claude-code]                                              │
 │ --project               Установить в текущий проект, а не для пользователя (во все проекты).     │
+│ --skill          <str>  Install only this bundled skill (see `skill list`); by default all.      │
 │ --json                  Машиночитаемый вывод: JSON в stdout.                                     │
 │ --quiet                 Не печатать ничего, кроме данных.                                        │
 │ --help                  Show this message and exit.                                              │

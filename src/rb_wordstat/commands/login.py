@@ -1,7 +1,7 @@
 """`auth login` / `auth logout` — only in CLIs generated with credentials (include_auth).
 
 `commands/auth.py` registers these into the `auth` group when this module
-exists; `auth status` is there in every CLI (tools/docs/standard-release.md §8).
+exists; `auth status` is there in every CLI (the Standard, Health).
 """
 
 from __future__ import annotations

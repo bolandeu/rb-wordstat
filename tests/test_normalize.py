@@ -1,3 +1,5 @@
+"""Tests of the normalisation functions of `core.normalize`: phrases, domains and URLs reduced to a stable key."""
+
 from __future__ import annotations
 
 import pytest

@@ -1,6 +1,7 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.5.6
+_commit: v1.27.1
 _src_path: https://homeserver.tailee01ab.ts.net:3000/bolandeu/cli-generator.git
+antagor_prefix: WORDSTAT
 author_name: bolandeu
 cli_name: wordstat
 description: Частотность Яндекс.Wordstat через провайдеров (XML River, XMLStock) с
@@ -8,10 +9,14 @@ description: Частотность Яндекс.Wordstat через прова�
 dist_name: rb-wordstat
 dist_name_legacy: ''
 include_auth: true
-include_ci: true
+include_contracts: true
 include_db: true
+include_describe: true
 include_http_provider: false
+include_project: true
+include_skill: true
+install_homeserver_users: rbtools
+install_mac: true
 package_name: rb_wordstat
-private_deps: false
 project_name: wordstat
 repository_url: https://homeserver.tailee01ab.ts.net:3000/bolandeu/wordstat

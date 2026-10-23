@@ -5,6 +5,11 @@
   from the shared base without anyone noticing.
 - URL not set → SQLite in the user data dir (tests, offline work).
 
+Tables of kind "cache" live in PostgreSQL schema `cache` (tables.CACHE_SCHEMA), the data
+in public. On SQLite the engine maps that schema away (`schema_translate_map`): one file,
+as before. `upgrade` refuses up front when the schema is missing or this role can't
+CREATE in it — before any migration runs, so nothing moves half-way.
+
 Schema changes are Alembic migrations (`migrations/`), tracked in this tool's own
 `alembic_version_<TOOL>` table. SQLite is brought up to date when opened. PostgreSQL
 is never migrated implicitly — it's one database for every machine, and a dev
@@ -35,7 +40,7 @@ from sqlalchemy import exc as sa_exc
 
 from .._distribution import TOOL
 from .errors import DatabaseNotMigrated, DatabaseTooNew, DatabaseUnavailable, InvalidArguments
-from .tables import PREFIX, metadata
+from .tables import CACHE_SCHEMA, PREFIX, metadata
 
 _PACKAGE_NAME = __name__.split(".")[0]
 
@@ -81,7 +86,8 @@ def _sqlite_pragmas(dbapi_connection, _record) -> None:
 
 def sqlite_engine(path: Path) -> sa.Engine:
     path.parent.mkdir(parents=True, exist_ok=True)
-    engine = sa.create_engine(f"sqlite:///{path}")
+    # SQLite has no schemas: the cache tables sit in the same file as the data.
+    engine = sa.create_engine(f"sqlite:///{path}", execution_options={"schema_translate_map": {CACHE_SCHEMA: None}})
     event.listen(engine, "connect", _sqlite_pragmas)
     return engine
 
@@ -113,8 +119,54 @@ def postgres_engine(url: str, *, env_var: str = ENV_VAR) -> sa.Engine:
 def alembic_config(connection: sa.Connection | None = None) -> Config:
     config = Config()
     config.set_main_option("script_location", f"{_PACKAGE_NAME}:migrations")
-    config.attributes.update(connection=connection, metadata=metadata, prefix=PREFIX, version_table=VERSION_TABLE)
+    config.attributes.update(
+        connection=connection,
+        metadata=metadata_for(connection) if connection is not None else metadata,
+        prefix=PREFIX,
+        version_table=VERSION_TABLE,
+        cache_schema=CACHE_SCHEMA,
+    )
     return config
+
+
+def metadata_for(bind: sa.Engine | sa.Connection) -> sa.MetaData:
+    """tables.py as this database holds it: as declared on PostgreSQL; on SQLite without schemas."""
+    if is_postgres(bind):
+        return metadata
+    flat = sa.MetaData(naming_convention=metadata.naming_convention)
+    for table in metadata.sorted_tables:
+        table.to_metadata(flat, schema=None)  # ty: ignore[invalid-argument-type] — None = no schema (SQLAlchemy docs)
+    return flat
+
+
+def _check_cache_schema(connection: sa.Connection) -> None:
+    """PostgreSQL: schema `cache` exists and this role may use and CREATE in it — if any table needs it."""
+    if not any(table.schema == CACHE_SCHEMA for table in metadata.sorted_tables):
+        return
+    exists = connection.execute(
+        sa.text("SELECT 1 FROM pg_namespace WHERE nspname = :schema"), {"schema": CACHE_SCHEMA}
+    ).scalar()
+    action = (
+        f"Schema '{CACHE_SCHEMA}' with USAGE and CREATE for this tool's role is set up by the infrastructure "
+        "— ask the user (sysadmin sets it up); nothing was migrated."
+    )
+    if not exists:
+        raise DatabaseUnavailable(
+            f"The database has no schema '{CACHE_SCHEMA}' for this tool's cache tables.", action=action
+        )
+    missing = [
+        privilege
+        for privilege in ("USAGE", "CREATE")
+        if not connection.execute(
+            sa.text("SELECT has_schema_privilege(:schema, :privilege)"),
+            {"schema": CACHE_SCHEMA, "privilege": privilege},
+        ).scalar()
+    ]
+    if missing:
+        raise DatabaseUnavailable(
+            f"This database role lacks {' and '.join(missing)} on schema '{CACHE_SCHEMA}' (for the cache tables).",
+            action=action,
+        )
 
 
 def head_revision() -> str:
@@ -144,7 +196,7 @@ class SchemaState:
             return False
         try:
             return ScriptDirectory.from_config(alembic_config()).get_revision(self.current) is None
-        except (RevisionError, CommandError):  # alembic raises (not returns None) for an unknown id
+        except RevisionError, CommandError:  # alembic raises (not returns None) for an unknown id
             return True
 
 
@@ -173,6 +225,7 @@ def upgrade(engine: sa.Engine) -> SchemaState:
     with engine.begin() as connection:
         if is_postgres(connection):
             connection.execute(sa.text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": VERSION_TABLE})
+            _check_cache_schema(connection)
         command.upgrade(alembic_config(connection), "head")
     return schema_state(engine)
 
@@ -242,10 +295,10 @@ def _reset_sequences(connection: sa.Connection, table: sa.Table) -> None:
     """Rows came in with their ids: move each serial/identity sequence past them, or the next insert collides."""
     for column in table.primary_key.columns:
         if column.autoincrement is True or (column.autoincrement == "auto" and isinstance(column.type, sa.Integer)):
-            top = f"SELECT max({column.name}) FROM {table.name}"  # noqa: S608 — names from tables.py, not input
+            top = f"SELECT max({column.name}) FROM {table.fullname}"  # noqa: S608 — names from tables.py, not input
             connection.execute(
                 sa.text(f"SELECT setval(pg_get_serial_sequence(:table, :column), coalesce(({top}), 0) + 1, false)"),
-                {"table": table.name, "column": column.name},
+                {"table": table.fullname, "column": column.name},
             )
 
 
@@ -356,6 +409,7 @@ __all__ = [
     "database_url",
     "doctor_checks",
     "import_sqlite",
+    "metadata_for",
     "open_db",
     "push",
     "push_tables",

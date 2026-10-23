@@ -1,3 +1,7 @@
+"""The `auth` command group: `status` reports the health of the credentials of every provider, or an empty report when
+the package has none.
+"""
+
 from __future__ import annotations
 
 import importlib
@@ -7,9 +11,9 @@ import typer
 
 from .. import output
 from ..core.errors import InvalidArguments
-from ..core.version import DEV_VERSION, cli_name, installed_version, module_exists
+from ..core.version import DEV_VERSION, cli_name, installed_version, module_exists, optional_module
 
-# `auth status` exists in every CLI (tools/docs/standard-release.md §8); a CLI
+# `auth status` exists in every CLI (the Standard, Health); a CLI
 # generated without credentials (no credentials/ package, no commands/login.py)
 # reports an empty `credentials` list and exits 0. Detected at runtime so this
 # file needs no template logic — same approach as doctor.py.
@@ -57,7 +61,6 @@ def auth_status(
     output.emit_report(ctx, payload, health.render, problem)
 
 
-if module_exists(f"{_PACKAGE_NAME}.commands.login"):
-    _login = importlib.import_module(f"{_PACKAGE_NAME}.commands.login")
+if _login := optional_module(f"{_PACKAGE_NAME}.commands.login"):
     app.command("login")(_login.login)
     app.command("logout")(_login.logout)

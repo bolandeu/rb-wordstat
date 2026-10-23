@@ -1,3 +1,7 @@
+"""The credential store: save, read and delete a provider's secrets in the system keyring, or in environment variables
+where no keyring exists.
+"""
+
 from __future__ import annotations
 
 import json
@@ -231,7 +235,7 @@ def delete_credential(provider: str) -> None:
 # Convenience wrappers for the common single-secret case (most providers
 # only ever need one API key). Multi-field providers should use
 # get_credential/store_credential/read_fields_from_env directly instead, in
-# their own commands/auth flow — see architecture.md.
+# their own commands/auth flow.
 
 
 def get_secret(provider: str, field: str = "api_key") -> str | None:

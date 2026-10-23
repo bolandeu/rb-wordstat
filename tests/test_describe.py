@@ -6,7 +6,7 @@
   it lists shows up in that command's --help;
 - snapshot: tests/snapshots/describe.json (syrupy). A changed contract fails until
   the snapshot is refreshed with `uv run pytest --snapshot-update`, which puts the
-  change in the diff — review it like any other breaking change (conventions.md).
+  change in the diff — review it like any other breaking change.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import enum
 import json
 import os
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import jsonschema
@@ -26,7 +26,7 @@ from syrupy.extensions.single_file import SingleFileSnapshotExtension, WriteMode
 from typer.testing import CliRunner
 
 from rb_wordstat.cli import app
-from rb_wordstat.core import db, errors, opencli
+from rb_wordstat.core import db, errors, opencli, tables
 
 CLI = "wordstat"
 SCHEMA = json.loads((Path(__file__).parent / "data" / "opencli.schema.json").read_text())
@@ -128,6 +128,10 @@ class DescribeSnapshot(SingleFileSnapshotExtension):
         return "describe"
 
 
+def test_describe_is_the_same_in_ci(same_in_ci: Callable[[str], None]) -> None:
+    same_in_ci("test_describe_snapshot")
+
+
 def test_describe_snapshot(snapshot) -> None:
     document = json.loads(json.dumps(DOCUMENT))
     # Versions move with every release and template update — not a contract change.
@@ -147,6 +151,12 @@ def test_database_file_is_where_sqlite_path_puts_it(monkeypatch: pytest.MonkeyPa
     files = _meta(opencli.document(typer.main.get_command(app))["command"])["x-rb-data"]["user_data_dir"]["files"]
     assert files[0]["path"] == "own.sqlite"
     assert os.environ[db.PATH_ENV_VAR] == str(tmp_path / "elsewhere.db")
+
+
+def test_tables_name_their_schema() -> None:
+    """PostgreSQL schema per table: `cache` for kind="cache" (T30), `public` for the data."""
+    found = {t["name"]: t["schema"] for t in _meta(DOCUMENT["command"])["x-rb-data"]["tables"]}
+    assert found == {t.name: t.schema or "public" for t in tables.metadata.sorted_tables}
 
 
 class Color(enum.Enum):
@@ -184,6 +194,8 @@ def test_parameter_shapes() -> None:
     assert _meta(options["--color"])["x-rb-default"] == "red"
     assert _meta(options["--out"])["x-rb-default"] == "out"
     assert _meta(options["--tag"])["x-rb-multiple"] is True
+    assert options["--color"]["arguments"][0]["arity"] == {"maximum": 1}
+    assert "arity" not in options["--tag"]["arguments"][0]
     assert options["--secret"]["hidden"] is True
     assert options["--force"]["aliases"] == ["--no-force"] and "arguments" not in options["--force"]
     assert options["--name"]["required"] is True

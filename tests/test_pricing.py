@@ -10,7 +10,7 @@ import pytest
 from rb_wordstat.core import opencli, services
 from rb_wordstat.core.models import FreqType
 
-from .test_cli import invoke, invoke_json
+from .test_cli import invoke, invoke_json, plain
 from .test_search import fake_search, result  # noqa: F401 — фикстура
 
 
@@ -101,7 +101,7 @@ def test_search_without_price_warns(fake_search: list[dict], tmp_path: Path) -> 
 
 
 def test_cost_documented() -> None:
-    help_text = invoke("search", "--help", env={"COLUMNS": "200"}).stdout
+    help_text = plain(invoke("search", "--help", env={"COLUMNS": "200"}).stdout)
     assert "cost_total" in help_text and "WORDSTAT_<PROVIDER>_PRICE" in help_text
     env = {entry["name"]: entry for entry in opencli.env_vars()}
     for provider in ("xmlriver", "xmlstock"):

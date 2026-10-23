@@ -1,3 +1,7 @@
+"""The provider contract: what a provider declares, how its credentials are checked, and the discovery of the providers
+in this package.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -339,6 +343,6 @@ def _entries(items: list[dict]) -> list[WordstatEntry]:
     for item in items:
         try:
             result.append(WordstatEntry(text=item["text"], value=to_int(item["value"])))
-        except (KeyError, ValueError):
+        except KeyError, ValueError:
             continue  # битая строка не должна ронять весь ответ
     return result

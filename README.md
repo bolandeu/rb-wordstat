@@ -9,21 +9,16 @@ Python-библиотека (`from rb_wordstat import WordstatClient`). Python-�
 ## Установка
 
 ```bash
-uv tool install "git+https://github.com/bolandeu/wordstat.git"
+uv tool install rb-wordstat --index https://homeserver.tailee01ab.ts.net:3000/api/packages/bolandeu/pypi/simple
 ```
 
-Одинаково на macOS, Linux и Windows; обновление — `uv tool upgrade rb-wordstat`, конкретная
-версия — `...wordstat.git@v0.2.0`.
-
-**Репозиторий приватный.** `uv` ходит в git так же, как `git clone`. Если установка
-падает с ошибкой авторизации — один раз `gh auth login` (или `gh auth setup-git`, если
-`gh` залогинен через `--with-token`), либо SSH-вариант:
+Из git-тега (ставить из тега, не из ветки):
 
 ```bash
-uv tool install "git+ssh://git@github.com/bolandeu/wordstat.git"
+uv tool install "rb-wordstat @ git+https://homeserver.tailee01ab.ts.net:3000/bolandeu/wordstat.git@vX.Y.Z"
 ```
 
-Как зависимость другого проекта: `uv add "rb-wordstat @ git+https://github.com/bolandeu/wordstat.git"`.
+`vX.Y.Z` — последний тег релиза. Одинаково на macOS, Linux и Windows; обновление — `uv tool upgrade rb-wordstat`.
 
 ## Доступы
 
@@ -203,12 +198,9 @@ for r in results:
 ```bash
 uv sync
 uv run wordstat --help
-uv run scripts/release.py --check   # весь гейт: lock, ruff, ty, pytest, фрагмент, сборка, аудит
-scripts/install_hooks.sh      # pre-commit: блокирует устаревшие docstring команд
+# весь гейт — шаг `rb-release check` в .gitea/workflows/ci.yml, запускать эту команду перед коммитом
 uv tool install --editable .  # глобальная команда из рабочей копии
 ```
 
-Версия — из git-тега `vX.Y.Z`, в `pyproject.toml` её нет. `CHANGELOG.md` руками не
-править: каждое изменение — фрагмент `uv run towncrier create +<slug>.<type>.md -c "…"`.
-Релиз: `uv run scripts/release.py patch|minor|major` с чистого `main` — гейт, сборка
-changelog, коммит `Release vX.Y.Z`, тег; команду push печатает, но не выполняет.
+Версия — из git-тега `vX.Y.Z`, в `pyproject.toml` её нет. `CHANGELOG.md` пишет `antagor publish`, руками не
+править. Задачи и релизы — через Antagor (`antagor board`).

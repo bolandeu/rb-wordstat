@@ -1,3 +1,5 @@
+"""The `db` command group: migrate, inspect and reset the tool's database."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -9,6 +11,11 @@ from .. import output
 from ..core import db
 
 app = output.group("Manage the tool's database (shared PostgreSQL or local SQLite).")
+
+
+def register(root: typer.Typer) -> None:
+    """Add the `db` group to the CLI's root (the database part, copier's include_db)."""
+    root.add_typer(app, name="db")
 
 
 def _state(engine) -> dict:

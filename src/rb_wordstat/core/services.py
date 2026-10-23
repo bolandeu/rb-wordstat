@@ -1,3 +1,7 @@
+"""Project services: find the project folder, read and write its config file, and the check that the installed CLI is
+new enough for it.
+"""
+
 from __future__ import annotations
 
 import csv

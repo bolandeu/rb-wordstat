@@ -1,42 +1,15 @@
-from __future__ import annotations
+"""The `doctor` command: checks of this CLI's own setup, one line per check."""
 
-from pathlib import Path
+from __future__ import annotations
 
 import typer
 
 from .. import output
-from ..core import db, deps, services
+from ..core import deps
 from ..core.cache import ResponseCache
-from ..core.errors import CliTooOld, InvalidArguments
-from ..core.models import DEFAULT_PROVIDERS, ProjectConfig
-from ..core.version import DEV_VERSION, cli_name, installed_version
-from ..credentials import manager as credentials
-from ..providers import provider_class
+from ..core.version import DEV_VERSION, installed_version, optional_module
 
-
-def _auth_checks(providers: list[str]) -> list[dict]:
-    backend = credentials.store_backend()
-    checks: list[dict] = [
-        {
-            "name": "credential_store",
-            "ok": backend is not None,
-            "detail": backend or "no usable OS keychain backend; credentials must come from environment variables",
-        }
-    ]
-    for provider in providers:
-        try:
-            available = provider_class(provider).load_credential() is not None
-        except InvalidArguments as exc:
-            checks.append({"name": f"credential:{provider}", "ok": False, "detail": exc.message})
-            continue
-        checks.append(
-            {
-                "name": f"credential:{provider}",
-                "ok": available,
-                "detail": None if available else f"run '{cli_name()} auth login --provider {provider}'",
-            }
-        )
-    return checks
+_PACKAGE_NAME = __name__.split(".")[0]
 
 
 @output.guard
@@ -57,34 +30,19 @@ def doctor(
     checks: list[dict] = [{"name": "python", "ok": True}]
     checks.append({"name": "cli_version", "ok": True, "detail": installed_version() or DEV_VERSION})
 
-    start = Path(ctx.obj.get("project") or Path.cwd())
-    output.vecho(ctx, f"Searching for a project root starting at: {start}")
-    root = services.find_project_root(start)
-    # Проект необязателен: без него search работает с настройками по умолчанию.
-    checks.append({"name": "project", "ok": True, "detail": str(root) if root else "none — using defaults"})
+    if project := optional_module(f"{_PACKAGE_NAME}.commands.project"):  # include_project=false drops it
+        checks.extend(project.doctor_checks(ctx))
 
-    config: ProjectConfig | None = None
-    if root is not None:
-        try:
-            config = services.load_config(root, check_compat=False)
-            checks.append({"name": "config", "ok": True})
-        except Exception as exc:
-            checks.append({"name": "config", "ok": False, "detail": str(exc)})
-    if config is not None:
-        try:
-            services.check_cli_compat(config)
-            checks.append({"name": "cli_compat", "ok": True, "detail": f"project requires >= {config.cli.min_version}"})
-        except CliTooOld as exc:
-            checks.append({"name": "cli_compat", "ok": False, "detail": exc.message})
-
-    checks.extend(db.doctor_checks())
+    if db := optional_module(f"{_PACKAGE_NAME}.core.db"):  # include_db=false drops it at generation time
+        checks.extend(db.doctor_checks())
     try:
         stats = ResponseCache().stats()
         checks.append({"name": "cache", "ok": True, "detail": f"{stats.path} ({stats.entries} записей)"})
     except Exception as exc:
         checks.append({"name": "cache", "ok": False, "detail": f"журнал недоступен: {exc}"})
 
-    checks.extend(_auth_checks(config.providers if config else DEFAULT_PROVIDERS))
+    if credentials := optional_module(f"{_PACKAGE_NAME}.credentials.health"):  # include_auth=false drops it
+        checks.extend(credentials.doctor_checks())
     checks.extend(deps.doctor_checks())  # [[tool.rb.external]] in pyproject.toml
 
     all_ok = all(check["ok"] for check in checks)

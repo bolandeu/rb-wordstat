@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "rb-consumer-contracts.json",
   "title": "Consumer contracts: tests/contracts/<consumer>/<provider>.yaml, and the provider's tests/contracts/fixtures.yaml",
-  "description": "Written by the consumer (source of truth: its repo; the provider keeps a copy), run by the provider's gate (release.py --check, step 'contracts'). Runner: tests/test_contracts.py; documentation: cli-generator architecture.md §13.",
+  "description": "Written by the consumer (source of truth: its repo; the provider keeps a copy), run by the provider's gate (step 'contracts'). Runner: tests/test_contracts.py; documentation: the Standard, Consumer contracts.",
   "$defs": {
     "family": {
       "enum": ["text", "integer", "number", "boolean", "date", "datetime", "json", "any"],

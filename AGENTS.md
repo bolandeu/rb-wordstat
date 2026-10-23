@@ -1,50 +1,20 @@
 # AGENTS.md
 
-Guidance for coding agents working on the **rb-wordstat** package (import `rb_wordstat`, command `wordstat`)
-itself (not its end users — see `src/rb_wordstat/data/SKILL.md` for
-that).
+Pointers for agents. Antagor shows the changing state (statuses, branches, tasks): `antagor board`.
 
-## Development
+- What the project is, and the domain glossary: `CONTEXT.md`. Take terms only from there.
+- Decisions and why: `docs/adr/` (format: `docs/adr/README.md`).
+- Code rules for review: `CODING_STANDARDS.md`.
+- Antagor keeps the tasks and epics: `.agents/antagor/`.
+- How to write to the Human and to agents (ASD-STE100): the skill `antagor-method`, section «How to write to the Human and to agents».
+- The package Standard: https://homeserver.tailee01ab.ts.net:3000/bolandeu/cli-generator/src/branch/main/skills/cli-builder/reference/standard.md (sections by name, for example «Install»).
+- The gate before a commit: the `rb-release check` step of `.gitea/workflows/ci.yml` — run that command.
 
-```bash
-uv sync                          # also writes uv.lock — commit it
-uv run wordstat --help
-uv run scripts/release.py --check   # the whole gate — run it before every commit
-```
+## Architect only
 
-**Before every commit, `uv run scripts/release.py --check` must pass.**
-It is the authoritative gate (CI, if the repo keeps it, runs exactly this,
-and every release runs it too): `uv lock --check`, ruff check + format,
-ty, pytest (coverage floor, help contract + snapshots, `auth status`
-shape), the list of existing tests changed since the last tag, a
-changelog fragment for any change since the last tag, and a wheel build
-installed into a throwaway venv where `wordstat --version` must
-match the built version. A failure names the step and shows its output —
-fix the cause, never skip the step.
+A worker does not need this section: Antagor cuts it from the worker's brief.
 
-**TDD is required, and checked** (user, 2026-10-02; `~/Work/dev/docs/testing.md`):
-
-1. **Red first.** The test is committed before the code that makes it
-   pass — git shows the order. Keep the failing run's output: it goes
-   into the readiness report.
-2. **A test is not edited to fit the code.** An existing test changes only
-   when the requirement did. The gate's `existing tests` step lists every
-   test the last release had that is now changed or gone; each one goes
-   into the report with its reason — without one dev doesn't let the
-   release through.
-3. **The bar is set by others.** Acceptance scenarios are written by dev
-   with the user, contract tests (`--json`, exit codes, `v1` views) by the
-   consumer. You write the unit tests and pass everyone's — a contract
-   test from a consumer is an existing test like any other.
-4. **Mutation testing**, now and then and before a big release (not in
-   the gate): `uv run --group mutation mutmut run`, then `mutmut results`
-   / `mutmut browse` — a surviving mutant is a line no test really checks.
-
-Run `scripts/install_hooks.sh` once per clone: it points git at the
-versioned hooks in `.githooks/` (Claude Code sessions do this themselves
-via `.claude/settings.json`). The pre-commit hook **blocks** a commit where
-a command's logic changed but its docstring didn't, and warns when `src/`
-changed with no changelog fragment on the branch.
+## Package notes
 
 **A command that may take more than a couple of minutes runs detached —
 only through `scripts/run_detached.sh <label> <command...>`, then poll
@@ -141,44 +111,6 @@ WordstatParams, WordstatResult, WordstatEntry, FreqType`, plus `AuthRequired` /
 Keep these names and signatures stable — other projects depend on them.
 Logging is stdlib `logging` (logger `rb_wordstat`), never `print`.
 
-## Releasing
-
-- **Version = git tag.** There is no `version =` in `pyproject.toml`;
-  uv-dynamic-versioning reads the latest `vX.Y.Z` tag at build time. Don't
-  add one back, don't hard-code a version string anywhere.
-- **Changelog = fragments.** Don't edit `CHANGELOG.md`. Every user-visible
-  change adds one fragment:
-  `uv run towncrier create +<slug>.<type>.md -c "One or two sentences."`
-  (type: added/changed/deprecated/removed/fixed/security). CI fails a PR
-  without one.
-- **Release** from a clean, up-to-date `main`:
-  `uv run scripts/release.py patch|minor|major` — gate, towncrier build,
-  commit `Release vX.Y.Z`, annotated tag. It never pushes, and neither do
-  you: report the release to the root agent (below). The report carries
-  the red run of the new tests and every `existing tests` entry with its
-  reason (Development, TDD).
-- **Every user-visible change ships as a release.** Servers, other tools
-  and the Mac install only from tags, never from `main`, so a merged change
-  without a release is invisible to them. A change that needs a fragment is
-  done only after the release: merge to `main`, run `release.py`, hand it
-  to the root agent for the push, and name the new tag in the report.
-  Maintenance-only commits (no fragment) wait for the next release. Don't
-  leave a fragment unreleased on `main` without naming the reason.
-- **SemVer is a promise about the CLI surface.** Removing/renaming/changing
-  commands, flags, the `--json` shape, exit or error codes is breaking —
-  major, or **minor while at `0.x`**. A new feature with old behaviour
-  intact is minor (**patch while at `0.x`**); a fix is patch. Deprecate first
-  (warning + a `deprecated` fragment), remove in the next breaking release.
-- **Depending on another of our tools**: pin by tag in `[tool.uv.sources]`
-  (`{ git = "...", tag = "vX.Y.Z" }`) with a compatible range in
-  `dependencies` (`>=0.2,<0.3`) — never `branch = "main"`, never a
-  committed `path =`. Bump = new tag + `uv lock --upgrade-package <name>`
-  + full gate, one commit.
-
-Projects pin the CLI they need via `[cli] min_version` in their config, so
-a change a project depends on needs a release before that project can
-require it.
-
 ## After changing the command surface
 
 Agents discover commands from a bare `wordstat` / `--help`,
@@ -194,10 +126,7 @@ docstring in the same commit**:
   is the user-visible change (`describe --json` is the machine-readable
   contract the tools catalog and the platform read).
 
-Enforced: Claude Code hooks (`.claude/settings.json`: PostToolUse after
-editing a command file, Stop before ending the turn), the pre-commit hook,
-and `tests/test_help.py` in the gate. If a hook fires on a refactor that
-truly doesn't change behaviour, say so — don't bypass it silently. `src/rb_wordstat/data/SKILL.md`
+Enforced by `tests/test_help.py` and the docstring check in the project's `checks`. `src/rb_wordstat/data/SKILL.md`
 deliberately lists no commands, only conventions; touch it only if a
 convention changes (a new exit code, a new credential rule).
 
@@ -210,7 +139,7 @@ Full rules: `~/Work/tools/docs/standard-release.md` §13.
 - **Nobody here pushes; releases and questions go through the root agent**,
   never straight to the user in this window. Release or branch ready →
   `~/Work/tools/scripts/agent_say.sh tools "<repo, branch, tags, what's
-  inside, release.py --check result, the red run, changed existing tests
+  inside, gate result, the red run, changed existing tests
   with reasons>"`, one message per tag. The root
   agent checks it and queues it for dev; dev shows the user and pushes
   after their yes; then the root agent installs it on the Mac and the

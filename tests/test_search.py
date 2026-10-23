@@ -13,7 +13,7 @@ from rb_wordstat.core.errors import AuthRequired, InvalidArguments, ProviderErro
 from rb_wordstat.core.models import ALL_FREQ_TYPES, FreqType, WordstatEntry, WordstatResult
 from rb_wordstat.providers.base import WordstatProvider
 
-from .test_cli import invoke, invoke_json
+from .test_cli import invoke, invoke_json, plain
 
 
 class FakeProvider(WordstatProvider):
@@ -240,16 +240,16 @@ def test_search_json(fake_search: list[dict], tmp_path: Path) -> None:
 def test_search_human_tables(fake_search: list[dict], tmp_path: Path) -> None:
     single = invoke("--project", str(tmp_path), "search", "диван")
     assert single.exit_code == 0
-    assert "Частота (базовая)" in single.stdout
-    assert "Похожие запросы" in single.stdout
-    assert "Ассоциации" in single.stdout
+    assert "Частота (базовая)" in plain(single.stdout)
+    assert "Похожие запросы" in plain(single.stdout)
+    assert "Ассоциации" in plain(single.stdout)
 
     out = tmp_path / "kw.json"
     multi = invoke("--project", str(tmp_path), "search", "диван", "-f", "all", "--no-keywords", "-o", str(out))
     assert multi.exit_code == 0
-    assert "точная+порядок" in multi.stdout
-    assert "Похожие запросы" not in multi.stdout
-    assert "Сохранено" in multi.stdout
+    assert "точная+порядок" in plain(multi.stdout)
+    assert "Похожие запросы" not in plain(multi.stdout)
+    assert "Сохранено" in plain(multi.stdout)
 
 
 def test_search_invalid_freq_is_exit_2(fake_search: list[dict]) -> None:

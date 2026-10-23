@@ -14,7 +14,7 @@
 
  Example: wordstat auth status --check --json
 
-╭─ Параметры ──────────────────────────────────────────────────────────────────────────────────────╮
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
 │ --check                  Also make one cheap read-only call per provider (10 s timeout) to prove │
 │                          each works.                                                             │
 │ --provider        <str>  Report only this provider, or one target as <kind>:<target> (default:   │

@@ -3,10 +3,10 @@
 
  Manage the tool's database (shared PostgreSQL or local SQLite).
 
-╭─ Параметры ──────────────────────────────────────────────────────────────────────────────────────╮
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭─ Команды ────────────────────────────────────────────────────────────────────────────────────────╮
+╭─ Commands ───────────────────────────────────────────────────────────────────────────────────────╮
 │ status         Show which database is used and its schema revision against this CLI's.           │
 │ upgrade        Apply pending schema migrations to the database.                                  │
 │ import-sqlite  Copy a local SQLite database into the configured database, once.                  │

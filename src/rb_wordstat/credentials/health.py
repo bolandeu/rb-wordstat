@@ -1,6 +1,6 @@
-"""The `auth status [--check] --json` report (tools/docs/standard-release.md §8).
+"""The `auth status [--check] --json` report (the Standard, Health).
 
-Its shape is a cross-tool contract — `tools-watch` reads it from every CLI
+Its shape is a cross-tool contract — a consumer reads it from every CLI
 without knowing any provider — so it is pinned by `tests/test_auth.py`, and
 changing it is a breaking change. Credential values never leave this
 module: they are used only to scrub messages. Knows only `providers.Provider`:
@@ -15,10 +15,11 @@ from rich.markup import escape
 
 from .. import output, providers
 from ..core.errors import AuthRequired, CliError, CredentialsUnhealthy, InvalidArguments, ProviderError
+from ..core.version import DEV_VERSION, cli_name, installed_version
 from ..providers import Health, Provider
 from . import manager
 
-CHECK_TIMEOUT = 10.0  # seconds per provider (standard §8) — enforced by the provider's own client timeout
+CHECK_TIMEOUT = 10.0  # seconds per provider — enforced by the provider's own client timeout
 # Statuses that are a problem even for an optional provider: a credential is
 # there but wrong. Anything else only counts against required providers.
 ALWAYS_PROBLEMS = frozenset({"invalid", "expired"})
@@ -102,7 +103,7 @@ def _entry(provider_cls: type[Provider], check: bool, target: str | None = None)
         return entry
 
     # Env vars override the keychain field by field; a mix is reported as env
-    # (what wins) with every place named in source_ref (standard §8: no "mixed").
+    # (what wins) with every place named in source_ref (never "mixed").
     used_env = list(dict.fromkeys(located[f][2] for f in fields if located[f][1] == "env"))
     services = list(dict.fromkeys(located[f][2] for f in fields if located[f][1] == "keychain"))
     used_keychain = "keychain service " + ", ".join(services) if services else ""
@@ -159,7 +160,7 @@ def select(known: list[type[Provider]], only: str | None) -> list[type[Provider]
 
 
 def report(tool: str, version: str, selected: list[type[Provider]], *, check: bool, only: str | None = None) -> dict:
-    """The §8 report for `selected` providers (only those that declare credential fields)."""
+    """The report for `selected` providers (only those that declare credential fields)."""
     return {
         "tool": tool,
         "version": version,
@@ -191,3 +192,22 @@ def render(payload: dict) -> None:
         expires = f", expires {entry['expires_at']}" if entry["expires_at"] else ""
         line = f"{entry['provider']}{optional}: {entry['status']} ({entry['source']}: {entry['source_ref']}){expires}{detail}"
         output.human.echo_markup(f"{mark} {escape(line)}")
+
+
+def doctor_checks() -> list[dict]:
+    """The `credential_store` and `credential` checks of `doctor`: the rule of `auth status`, offline (presence only)."""
+    backend = manager.store_backend()
+    payload, problem = status(cli_name(), installed_version() or DEV_VERSION, check=False, only=None)
+    providers_seen = ", ".join(f"{entry['provider']}: {entry['status']}" for entry in payload["credentials"])
+    return [
+        {
+            "name": "credential_store",
+            "ok": True,  # the keychain is a convenience of development; environment variables are the source in production
+            "detail": backend or "no OS keychain backend; credentials come from environment variables",
+        },
+        {
+            "name": "credential",
+            "ok": problem is None,
+            "detail": providers_seen or "no providers with credentials",
+        },
+    ]

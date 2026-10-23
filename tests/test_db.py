@@ -1,3 +1,5 @@
+"""Tests of the database layer: names, migrations, the tables' declared kinds and views, on SQLite."""
+
 from __future__ import annotations
 
 import json
@@ -105,7 +107,7 @@ def test_tables_match_the_migrations() -> None:
         context = MigrationContext.configure(
             conn, opts={"include_name": lambda name, type_, *_: type_ != "table" or name.startswith(db.PREFIX)}
         )
-        assert compare_metadata(context, tables.metadata) == []
+        assert compare_metadata(context, db.metadata_for(engine)) == []
 
 
 def test_url_never_falls_back_to_sqlite(monkeypatch: pytest.MonkeyPatch, _local_database: Path) -> None:
