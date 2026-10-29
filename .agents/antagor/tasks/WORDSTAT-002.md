@@ -3,8 +3,8 @@ id: WORDSTAT-002
 title: 'Journal read: an unreadable row is a cache miss with one warning (T432)'
 status: queue
 attempts: 0
-blocked: false
-blocked_reason: null
+blocked: true
+blocked_reason: check_broken
 phase: null
 tests_hash: null
 publish_stage: null
@@ -27,7 +27,7 @@ budget_usd: null
 epic: null
 spec_refs: []
 checks:
-- uv run pytest tests/test_cache.py -q
+- uv run pytest tests/test_cache.py -q --no-cov
 - python3 scripts/check_command_docstrings.py
 resident: null
 tool: null
