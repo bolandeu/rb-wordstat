@@ -15,6 +15,7 @@ diskcache — это key→value без истории и выборки по д
 from __future__ import annotations
 
 import json
+import logging
 import zlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -25,6 +26,8 @@ from pydantic import BaseModel
 from . import db
 from .normalize import norm_phrase
 from .tables import responses
+
+log = logging.getLogger(__name__)
 
 
 def default_path() -> Path:
@@ -130,9 +133,13 @@ class ResponseCache:
     def latest(
         self, *, provider: str, freq_type: str, region: int | str, query: str, max_age: timedelta | None = None
     ) -> CachedResponse | None:
-        """Самая свежая запись этого провайдера по ключу, или None."""
+        """Самая свежая запись этого провайдера по ключу, или None.
+
+        Нечитаемая запись (не сжатый zlib JSON) — тоже None и одно предупреждение: живой
+        ответ ляжет новой строкой, и в следующий раз прочитается он.
+        """
         t = responses.c
-        sql = sa.select(t.data, t.provider, t.fetched_at).where(
+        sql = sa.select(t.id, t.data, t.provider, t.fetched_at).where(
             t.provider == provider, t.freq_type == freq_type, t.region == int(region), t.phrase_key == query_key(query)
         )
         if max_age is not None:
@@ -141,10 +148,12 @@ class ResponseCache:
             row = conn.execute(sql.order_by(t.fetched_at.desc()).limit(1)).first()
         if row is None:
             return None
-        return CachedResponse(
-            data=json.loads(zlib.decompress(row.data).decode("utf-8")), provider=row.provider,
-            fetched_at=_utc(row.fetched_at),
-        )  # fmt: skip
+        try:
+            data = json.loads(zlib.decompress(row.data).decode("utf-8"))
+        except (zlib.error, ValueError) as exc:  # ValueError — и JSON, и UTF-8
+            log.warning("Журнал: запись %s (провайдер %s) не читается — считаю промахом: %s", row.id, row.provider, exc)
+            return None
+        return CachedResponse(data=data, provider=row.provider, fetched_at=_utc(row.fetched_at))
 
     def stats(self) -> CacheStats:
         t = responses.c

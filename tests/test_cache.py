@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import logging
 import sqlite3
 import zlib
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from rb_wordstat.core import services
 from rb_wordstat.core.cache import ResponseCache, default_path, help_line, human_size, query_key
 from rb_wordstat.core.errors import InvalidArguments
 from rb_wordstat.core.models import FreqType
+from rb_wordstat.core.tables import responses
 
 from .test_cli import invoke, invoke_json, plain
 from .test_search import FakeProvider
@@ -21,6 +23,54 @@ from .test_search import FakeProvider
 def put(journal: ResponseCache, query: str = "Купить  Диван", provider: str = "a", total: int = 100) -> None:
     journal.put(provider=provider, freq_type="broad", region="213", query=query, total_value=total,
                 data={"total": total, "query": query})  # fmt: skip
+
+
+def put_unreadable(journal: ResponseCache, data: bytes) -> int:
+    """Запись, где `data` — не сжатый zlib JSON, как в журнале dev (T432); возвращает её id."""
+    with journal.engine.begin() as conn:
+        return conn.execute(
+            sa.insert(responses).values(
+                fetched_at=datetime(2026, 10, 1, tzinfo=UTC), provider="a", freq_type="broad", region=213,
+                phrase="диван", phrase_key="диван", total_value=5, data=data,
+            ).returning(responses.c.id)
+        ).scalar_one()  # fmt: skip
+
+
+UNREADABLE = {
+    "hex text": b"\\x" + zlib.compress(b'{"total": 5}').hex().encode(),  # копия bytea->text, первый байт 0x5c
+    "plain json": b'{"total": 5}',
+    "zlib, not json": zlib.compress(b"<html>"),
+    "zlib, not utf-8": zlib.compress(b"\xff\xfe"),
+}
+
+
+@pytest.mark.parametrize("data", UNREADABLE.values(), ids=UNREADABLE.keys())
+def test_unreadable_row_is_a_miss_with_one_warning(data: bytes, caplog: pytest.LogCaptureFixture) -> None:
+    journal = ResponseCache()
+    row_id = put_unreadable(journal, data)
+    caplog.set_level(logging.WARNING, logger="rb_wordstat")
+
+    assert journal.latest(provider="a", freq_type="broad", region=213, query="диван") is None
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert f"запись {row_id}" in warnings[0].getMessage() and "провайдер a" in warnings[0].getMessage()
+
+
+def test_client_replaces_unreadable_row_with_live_answer() -> None:
+    journal = ResponseCache()
+    put_unreadable(journal, UNREADABLE["hex text"])
+    primary = FakeProvider("a")
+    client = WordstatClient(providers=[primary], cache=journal)
+    params = WordstatParams(query="диван")
+
+    live = client.search_sync(params, use_cache=True)
+    assert [(r.from_cache, r.total_value) for r in live] == [(False, 100)]
+    assert len(primary.calls) == 1
+    assert journal.stats().entries == 2
+
+    cached = client.search_sync(params, use_cache=True)
+    assert [(r.from_cache, r.total_value) for r in cached] == [(True, 100)]
+    assert len(primary.calls) == 1
 
 
 def test_journal_put_latest_stats_entries_clear(_local_database: Path) -> None:
