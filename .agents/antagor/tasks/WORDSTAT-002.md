@@ -1,7 +1,7 @@
 ---
 id: WORDSTAT-002
 title: 'Journal read: an unreadable row is a cache miss with one warning (T432)'
-status: publish
+status: done
 attempts: 0
 blocked: false
 blocked_reason: null

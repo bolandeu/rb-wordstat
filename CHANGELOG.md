@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Versions follow
 
 The changelog is written by `antagor publish`; don't edit it by hand.
 
+## v0.7.2 — 2026-10-29
+
+### Outside epics
+
+- Journal read: an unreadable row is a cache miss with one warning (T432) (WORDSTAT-002)
+
 ## v0.7.1 — 2026-10-26
 
 ### Main
