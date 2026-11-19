@@ -133,7 +133,7 @@ convention changes (a new exit code, a new credential rule).
 ## Inside the tools system
 
 This tool is one service among many; the root `~/Work/tools/` agent
-deploys it, keeps its credentials (Doppler) and backs up its data (S3).
+deploys it, keeps its credentials (секрет-менеджер) and backs up its data (S3).
 Full rules: `~/Work/tools/docs/standard-release.md` §13.
 
 - **Nobody here pushes; releases and questions go through the root agent**,
