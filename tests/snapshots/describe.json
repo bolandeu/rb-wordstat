@@ -3,7 +3,7 @@
   "info": {
     "title": "wordstat",
     "version": "<version>",
-    "summary": "Частоты Яндекс.Wordstat через провайдеров (XML River, XMLStock) с фолбэком: CLI wordstat и библиотека rb_wordstat"
+    "summary": "Yandex Wordstat phrase frequencies through providers with fallback."
   },
   "command": {
     "name": "wordstat",

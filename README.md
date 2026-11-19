@@ -9,7 +9,6 @@ Python-библиотека (`from rb_wordstat import WordstatClient`). Python-�
 ## Установка
 
 ```bash
-uv tool install rb-wordstat --index https://homeserver.tailee01ab.ts.net:3000/api/packages/bolandeu/pypi/simple
 ```
 
 Из git-тега (ставить из тега, не из ветки):
