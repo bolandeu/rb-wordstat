@@ -454,9 +454,10 @@ def test_unavailable_keychain_warns_once_and_only_without_env(
         raise keyring.errors.NoKeyringError("no backend")
 
     monkeypatch.setattr(credentials.keyring, "get_password", broken_get_password)
-    monkeypatch.setattr(credentials, "_keychain_problem", None)
-    monkeypatch.setattr(credentials, "_warned_missing", False)
-    caplog.set_level("DEBUG", logger=credentials.log.name)
+    # The state lives in the shared store now: a fresh one has the "warn once" flag clear.
+    monkeypatch.setattr(credentials, "_STORE", credentials.Store(credentials.NAMESPACE))
+    credentials._SHARED.clear()
+    caplog.set_level("DEBUG", logger="rb_credentials.store")
 
     monkeypatch.setenv(f"{PREFIX}_DEMO_API_KEY", GOOD)  # every key in env: the keychain doesn't matter
     assert credentials.get_credential("demo", env_fields=["api_key"]) == {"api_key": GOOD}

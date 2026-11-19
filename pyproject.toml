@@ -9,6 +9,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "bolandeu" }]
 requires-python = ">=3.14"
 dependencies = [
+    "rb-credentials>=0.3,<1",
     "typer>=0.27,<0.29",
     "rich>=13.7",
     "pydantic>=2.6",
@@ -176,3 +177,11 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 [tool.ruff.lint.flake8-bugbear]
 # Typer's `param: T = typer.Option(...)` style is a call in a default on purpose.
 extend-immutable-calls = ["typer.Option", "typer.Argument"]
+
+[tool.uv.sources]
+rb-credentials = { index = "gitea" }
+
+[[tool.uv.index]]
+name = "gitea"
+url = "https://homeserver.tailee01ab.ts.net:3000/api/packages/bolandeu/pypi/simple"
+explicit = true
