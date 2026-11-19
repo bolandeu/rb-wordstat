@@ -198,7 +198,7 @@ for r in results:
 ```bash
 uv sync
 uv run wordstat --help
-# весь гейт — шаг `rb-release check` в .gitea/workflows/ci.yml, запускать эту команду перед коммитом
+# весь гейт — шаг `gate check` в .gitea/workflows/ci.yml, запускать эту команду перед коммитом
 uv tool install --editable .  # глобальная команда из рабочей копии
 ```
 
