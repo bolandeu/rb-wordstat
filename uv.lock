@@ -756,7 +756,7 @@ wheels = [
 
 [[package]]
 name = "rb-credentials"
-source = { directory = "../rb-credentials" }
+source = { editable = "../rb-credentials" }
 dependencies = [
     { name = "pydantic" },
 ]
@@ -819,7 +819,7 @@ requires-dist = [
     { name = "platformdirs", specifier = ">=4.2" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pydantic", specifier = ">=2.6" },
-    { name = "rb-credentials", directory = "../rb-credentials" },
+    { name = "rb-credentials", editable = "../rb-credentials" },
     { name = "rich", specifier = ">=13.7" },
     { name = "sqlalchemy", specifier = ">=2.0" },
     { name = "tomli-w", specifier = ">=1.0" },
