@@ -9,7 +9,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "bolandeu" }]
 requires-python = ">=3.14"
 dependencies = [
-    "rb-credentials>=0.3,<1",
+    "rb-credentials>=0.7.1,<1",
     "typer>=0.27,<0.29",
     "rich>=13.7",
     "pydantic>=2.6",

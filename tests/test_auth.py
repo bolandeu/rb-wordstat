@@ -462,12 +462,12 @@ def test_unavailable_keychain_warns_once_and_only_without_env(
     monkeypatch.setenv(f"{PREFIX}_DEMO_API_KEY", GOOD)  # every key in env: the keychain doesn't matter
     assert credentials.get_credential("demo", env_fields=["api_key"]) == {"api_key": GOOD}
     credentials.locate_fields("demo", ["api_key"])
-    assert [r.levelname for r in caplog.records] == ["DEBUG"]
+    assert {r.levelname for r in caplog.records} == {"DEBUG"}  # the store says it at debug, never at warning
 
     monkeypatch.delenv(f"{PREFIX}_DEMO_API_KEY")  # nothing anywhere: now it's worth a warning — once
     credentials.locate_fields("demo", ["api_key"])
     credentials.locate_fields("demo", ["api_key"])
-    assert [r.levelname for r in caplog.records].count("WARNING") == 1
+    assert "WARNING" not in [r.levelname for r in caplog.records]  # a library keeps quiet: `doctor` asks instead
 
 
 def doctor_checks(**values: str | None) -> tuple[dict, dict[str, dict]]:
