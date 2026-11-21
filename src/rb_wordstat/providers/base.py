@@ -249,8 +249,8 @@ class WordstatProvider(Provider, ABC):
         """Баланс в рублях; неверный доступ — AuthRequired, прочее — ProviderError."""
 
     @abstractmethod
-    def _params(self, query_sent: str, lr: int) -> dict:
-        """Параметры GET-запроса: доступы, запрос с оператором, регион."""
+    def _params(self, query_sent: str, lr: int, *, device: str | None = None, limit: int | None = None) -> dict:
+        """Параметры GET-запроса: доступы, запрос с оператором, регион, устройства и глубина похожих фраз."""
 
     @classmethod
     @abstractmethod
@@ -273,19 +273,37 @@ class WordstatProvider(Provider, ABC):
             await self._client.aclose()
             self._client = None
 
-    async def fetch(self, query: str, freq_type: FreqType, lr: int) -> WordstatResult:
+    async def fetch(
+        self,
+        query: str,
+        freq_type: FreqType,
+        lr: int,
+        *,
+        device: str | None = None,
+        limit: int | None = None,
+    ) -> WordstatResult:
         """Частота и похожие запросы для одного запроса и типа частоты."""
-        return self.to_result(await self.fetch_raw(query, freq_type, lr), query, freq_type)
+        raw = await self.fetch_raw(query, freq_type, lr, device=device, limit=limit)
+        return self.to_result(raw, query, freq_type)
 
-    async def fetch_raw(self, query: str, freq_type: FreqType, lr: int) -> dict:
+    async def fetch_raw(
+        self,
+        query: str,
+        freq_type: FreqType,
+        lr: int,
+        *,
+        device: str | None = None,
+        limit: int | None = None,
+    ) -> dict:
         """Сырой JSON-ответ (с данными или «ничего не найдено»); сбои — AuthRequired / ProviderError."""
         query_sent = freq_type.apply(query)
-        where = f"'{query_sent}' lr={lr}"
+        where = f"'{query_sent}' lr={lr}" + (f" device={device}" if device else "")
         last_error = "нет ответа"
 
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             try:
-                response = await self._http().get(self.url, params=self._params(query_sent, lr))
+                params = self._params(query_sent, lr, device=device, limit=limit)
+                response = await self._http().get(self.url, params=params)
             except httpx.TransportError as exc:
                 last_error = type(exc).__name__
             else:

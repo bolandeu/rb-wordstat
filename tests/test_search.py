@@ -205,7 +205,7 @@ def test_csv_modes(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
 def fake_search(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     calls: list[dict] = []
 
-    def fake(queries, *, freq, lr, providers, use_cache=False, max_age=None):
+    def fake(queries, *, freq, lr, providers, use_cache=False, max_age=None, device=None, limit=None):
         calls.append(
             {
                 "queries": queries,
@@ -214,6 +214,8 @@ def fake_search(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
                 "providers": providers,
                 "use_cache": use_cache,
                 "max_age": max_age,
+                "device": device,
+                "limit": limit,
             }
         )
         return [result(q, f) for q in queries for f in freq]

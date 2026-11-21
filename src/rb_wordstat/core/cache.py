@@ -61,6 +61,13 @@ def help_line() -> str:
     return f"Журнал ответов: {path} — {human_size(size) if size else 'пока пуст'}."
 
 
+def scope(device: str | None, limit: int | None) -> str:
+    """Условия ответа одной строкой: `<устройства>|<глубина>`; `''` — умолчания провайдера."""
+    if not device and limit is None:
+        return ""
+    return f"{device or ''}|{limit or ''}"
+
+
 def query_key(query: str) -> str:
     """Регистр, ё и лишние пробелы на частоту не влияют — и на ключ тоже."""
     return norm_phrase(query)
@@ -117,7 +124,15 @@ class ResponseCache:
         return engine.url.database or "" if engine.dialect.name == "sqlite" else db.describe(engine)
 
     def put(
-        self, *, provider: str, freq_type: str, region: int | str, query: str, total_value: int, data: dict
+        self,
+        *,
+        provider: str,
+        freq_type: str,
+        region: int | str,
+        query: str,
+        total_value: int,
+        data: dict,
+        scope: str = "",
     ) -> datetime:
         fetched_at = datetime.now(UTC)
         blob = zlib.compress(json.dumps(data, ensure_ascii=False).encode("utf-8"))
@@ -125,13 +140,20 @@ class ResponseCache:
             conn.execute(
                 sa.insert(responses).values(
                     fetched_at=fetched_at, provider=provider, freq_type=freq_type, region=int(region), phrase=query,
-                    phrase_key=query_key(query), total_value=total_value, data=blob,
+                    phrase_key=query_key(query), total_value=total_value, data=blob, scope=scope,
                 )
             )  # fmt: skip
         return fetched_at
 
     def latest(
-        self, *, provider: str, freq_type: str, region: int | str, query: str, max_age: timedelta | None = None
+        self,
+        *,
+        provider: str,
+        freq_type: str,
+        region: int | str,
+        query: str,
+        max_age: timedelta | None = None,
+        scope: str = "",
     ) -> CachedResponse | None:
         """Самая свежая запись этого провайдера по ключу, или None.
 
@@ -140,7 +162,11 @@ class ResponseCache:
         """
         t = responses.c
         sql = sa.select(t.id, t.data, t.provider, t.fetched_at).where(
-            t.provider == provider, t.freq_type == freq_type, t.region == int(region), t.phrase_key == query_key(query)
+            t.provider == provider,
+            t.freq_type == freq_type,
+            t.region == int(region),
+            t.phrase_key == query_key(query),
+            t.scope == scope,
         )
         if max_age is not None:
             sql = sql.where(t.fetched_at >= _cutoff(max_age))

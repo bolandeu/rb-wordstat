@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 import sqlalchemy as sa
 
 from ..providers import WordstatProvider, provider_class
-from .cache import ResponseCache
+from .cache import ResponseCache, scope
 from .errors import AuthRequired, ProviderError
 from .models import DEFAULT_PROVIDERS, FreqType, WordstatParams, WordstatResult
 
@@ -70,7 +70,17 @@ class WordstatClient:
             async with asyncio.TaskGroup() as group:
                 tasks = [
                     group.create_task(
-                        self._fetch_one(query, freq_type, params.lr, instances, semaphore, use_cache, max_age)
+                        self._fetch_one(
+                            query,
+                            freq_type,
+                            params.lr,
+                            instances,
+                            semaphore,
+                            use_cache,
+                            max_age,
+                            device=params.device,
+                            limit=params.limit,
+                        )
                     )
                     for query in params.get_queries()
                     for freq_type in params.freq
@@ -111,14 +121,23 @@ class WordstatClient:
         semaphore: asyncio.Semaphore,
         use_cache: bool = False,
         max_age: timedelta | None = None,
+        *,
+        device: str | None = None,
+        limit: int | None = None,
     ) -> WordstatResult:
         names = self._names()
+        condition = scope(device, limit)
         if use_cache and self.cache is not None:
             # Из журнала — только ответ провайдера из очереди и в её порядке:
             # формат ответа у каждого свой, разбирает его свой класс.
             for index, name in enumerate(names):
                 hit = self.cache.latest(
-                    provider=name, freq_type=freq_type.value, region=lr, query=query, max_age=max_age
+                    provider=name,
+                    freq_type=freq_type.value,
+                    region=lr,
+                    query=query,
+                    max_age=max_age,
+                    scope=condition,
                 )
                 if hit is not None:
                     result = self._class(index).to_result(hit.data, query, freq_type)
@@ -136,9 +155,13 @@ class WordstatClient:
             try:
                 provider = self._provider(index, instances)
                 async with semaphore:
-                    data = await provider.fetch_raw(query, freq_type, lr)
+                    # Условия передаются, только когда они заданы: провайдер-плагин со старой подписью работает.
+                    if device or limit is not None:
+                        data = await provider.fetch_raw(query, freq_type, lr, device=device, limit=limit)
+                    else:
+                        data = await provider.fetch_raw(query, freq_type, lr)
                 result = type(provider).to_result(data, query, freq_type)
-                fetched_at = self._save(name, freq_type, lr, query, result.total_value, data)
+                fetched_at = self._save(name, freq_type, lr, query, result.total_value, data, scope=condition)
                 # Платный — только ответ с данными; сбои, ответы-ошибки и их повторы
                 # (fetch_raw) и отказавшие провайдеры очереди — нет.
                 return result.model_copy(update={"provider": name, "fetched_at": fetched_at, "billable_requests": 1})
@@ -157,13 +180,23 @@ class WordstatClient:
         item = self._chain[index]
         return provider_class(item) if isinstance(item, str) else type(item)
 
-    def _save(self, provider: str, freq_type: FreqType, lr: int, query: str, total: int, data: dict) -> datetime:
+    def _save(
+        self,
+        provider: str,
+        freq_type: FreqType,
+        lr: int,
+        query: str,
+        total: int,
+        data: dict,
+        *,
+        scope: str = "",
+    ) -> datetime:
         """Записать ответ в журнал; сбой диска не должен ломать уже оплаченный запрос."""
         if self.cache is not None:
             try:
                 return self.cache.put(
                     provider=provider, freq_type=freq_type.value, region=lr, query=query, total_value=total,
-                    data=data,
+                    data=data, scope=scope,
                 )  # fmt: skip
             except sa.exc.SQLAlchemyError as exc:
                 log.warning("Не удалось записать ответ в журнал: %s", exc)

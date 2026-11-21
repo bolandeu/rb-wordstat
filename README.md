@@ -72,8 +72,13 @@ wordstat search "диван" "кресло" "стол" --freq broad,phrase --lr 
 wordstat search "купить диван" -p xmlstock,xmlriver
 wordstat search "купить диван" --freq all --output freq.csv
 wordstat search "купить диван" --output keywords.csv --csv-mode keywords
+wordstat search "купить диван" --device desktop --limit 500   # десктоп, до 500 похожих фраз
 wordstat search "купить диван" --json | jq '.results[].total_value'
 ```
+
+`--device` — `desktop`, `phone` (`mobile`), `tablet`, через запятую; пусто — все устройства. `--limit` — сколько
+похожих фраз просить (XMLStock `groupby`, 1..2000); у XML River глубина задаётся в настройках аккаунта, параметра
+нет. Оба условия входят в ключ журнала: ответ для десктопа не подменит ответ для всех устройств.
 
 CSV `freq`: `query,freq_type,freq_label,operator,total_value`. CSV `keywords`:
 `source_query,type,keyword,value` — похожие (`popular`) и ассоциации (`assoc`), только

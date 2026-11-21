@@ -39,8 +39,17 @@ class XmlRiverProvider(WordstatProvider):
             raise AuthRequired(self.name)
         raise ProviderError(self.name, f"баланс: неожиданный ответ ({text.strip()[:100]!r})")
 
-    def _params(self, query_sent: str, lr: int) -> dict:
-        return {"user": self._credential["user"], "key": self._credential["token"], "query": query_sent, "regions": lr}
+    def _params(self, query_sent: str, lr: int, *, device: str | None = None, limit: int | None = None) -> dict:
+        # Глубины (`limit`) в их API нет: сколько похожих фраз отдать, задаётся в настройках аккаунта.
+        params = {
+            "user": self._credential["user"],
+            "key": self._credential["token"],
+            "query": query_sent,
+            "regions": lr,
+        }
+        if device:
+            params["device"] = device
+        return params
 
     @classmethod
     def _api_error(cls, data: dict) -> ApiError | None:

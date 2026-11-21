@@ -81,6 +81,16 @@ def search(
         help="Тип(ы) частоты: broad, phrase, exact, exact-ord, all. Повторять флаг или через запятую.",
     ),
     lr: int = typer.Option(213, "--lr", help="Код региона Яндекса: 213=Москва, 2=СПб, 35=Краснодар, 65=Новосибирск."),
+    device: str | None = typer.Option(
+        None,
+        "--device",
+        help="Устройства через запятую: desktop, phone (mobile), tablet. Пусто — все устройства.",
+    ),
+    limit: int | None = typer.Option(
+        None,
+        "--limit",
+        help="Сколько похожих фраз просить: XMLStock `groupby`, 1..2000. У XML River глубина задаётся в аккаунте.",
+    ),
     provider: str | None = typer.Option(
         None,
         "--provider",
@@ -151,6 +161,7 @@ def search(
       wordstat search "купить диван"
       wordstat search "купить диван" --freq all --no-keywords
       wordstat search "диван" "кресло" --freq broad,phrase --lr 2
+      wordstat search "купить диван" --device desktop --limit 500
       wordstat search "купить диван" -p xmlstock,xmlriver   # xmlriver — фолбэк
       wordstat search "купить диван" --freq all --output freq.csv
       wordstat search "купить диван" --output keywords.csv --csv-mode keywords
@@ -170,6 +181,8 @@ def search(
         providers=providers,
         use_cache=cache and not force,
         max_age=services.parse_age(max_age) if max_age else None,
+        device=device,
+        limit=limit,
     )
 
     prices = services.resolve_prices(sorted({r.provider for r in results}), project)

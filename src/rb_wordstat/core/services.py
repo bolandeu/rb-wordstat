@@ -149,10 +149,12 @@ def search(
     providers: list[str],
     use_cache: bool = False,
     max_age: timedelta | None = None,
+    device: str | None = None,
+    limit: int | None = None,
 ) -> list[WordstatResult]:
     """Частоты по всем запросам × типам частоты через очередь провайдеров; ответы пишутся в журнал."""
     try:
-        params = WordstatParams(query=queries, lr=lr, freq=freq)
+        params = WordstatParams(query=queries, lr=lr, freq=freq, device=device, limit=limit)
     except ValidationError as exc:
         raise InvalidArguments("; ".join(err["msg"] for err in exc.errors())) from exc
     return WordstatClient(providers=providers).search_sync(params, use_cache=use_cache, max_age=max_age)

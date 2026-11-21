@@ -34,6 +34,8 @@ class FreqType(StrEnum):
         return labels[self]
 
 
+DEVICES: tuple[str, ...] = ("desktop", "phone", "mobile", "tablet")
+
 ALL_FREQ_TYPES: list[FreqType] = [
     FreqType.broad,
     FreqType.phrase,
@@ -63,6 +65,22 @@ class WordstatParams(BaseModel):
     query: str | list[str]
     lr: int = 213  # 213 = Москва
     freq: list[FreqType] = Field(default_factory=lambda: [FreqType.broad])
+    # Устройства через запятую: desktop, phone (mobile), tablet; пусто — все устройства.
+    device: str | None = None
+    # Сколько похожих фраз просить: XMLStock `groupby`, 1..2000; None — умолчание провайдера.
+    limit: int | None = Field(default=None, ge=1, le=2000)
+
+    @field_validator("device", mode="before")
+    @classmethod
+    def clean_device(cls, v: object) -> object:
+        """`desktop, phone` → `desktop,phone`; мусор — ошибка, а не молчаливые «все устройства»."""
+        if v is None:
+            return None
+        parts = [part.strip().lower() for part in str(v).split(",") if part.strip()]
+        unknown = [part for part in parts if part not in DEVICES]
+        if unknown:
+            raise ValueError(f"device: {', '.join(unknown)} — допустимо {', '.join(DEVICES)}")
+        return ",".join(dict.fromkeys(parts)) or None
 
     def get_queries(self) -> list[str]:
         if isinstance(self.query, str):

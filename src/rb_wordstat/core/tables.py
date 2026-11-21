@@ -56,9 +56,11 @@ responses = sa.Table(
     sa.Column("phrase_key", sa.Text, nullable=False),  # core.normalize.norm_phrase(phrase)
     sa.Column("total_value", sa.BigInteger, nullable=False),
     sa.Column("data", sa.LargeBinary, nullable=False),  # the raw answer, zlib-compressed JSON
+    # `<device>|<limit>`: the answer depends on both, so a cache hit must match them ('' = provider defaults).
+    sa.Column("scope", sa.Text, nullable=False, server_default=sa.text("''")),
     # The natural key; also the cache lookup (newest first by fetched_at).
     sa.UniqueConstraint(
-        "provider", "freq_type", "region", "phrase_key", "fetched_at", name="wordstat_responses_key_uq"
+        "provider", "freq_type", "region", "phrase_key", "fetched_at", "scope", name="wordstat_responses_key_uq"
     ),
     sa.Index(None, "fetched_at"),
     info={"kind": "cache", "push": {"since": "fetched_at"}},

@@ -30,6 +30,9 @@ are in the tool's state dir (`runs/`); `python3 scripts/detach.py stop
   class owns HTTP, retries, the timeout and mapping every vendor failure to
   `AuthRequired` / `ProviderError` — that is what `WordstatClient` switches
   to the next provider in the queue on, per (query, freq type) pair.
+  `--device` and `--limit` travel with the request into `_params` and into
+  the journal key (`core.cache.scope`: `'<device>|<limit>'`, `''` for the
+  provider's own defaults) — an answer under other conditions is another row.
   `_api_error` / `_parse` are classmethods so journal entries parse without
   credentials. The response journal (`core/cache.py`, table `wordstat_responses`
   in the tool's database, append-only, every raw answer, read only with `--cache`) lives in `WordstatClient`

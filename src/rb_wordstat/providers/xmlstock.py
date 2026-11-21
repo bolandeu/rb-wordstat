@@ -42,13 +42,15 @@ class XmlStockProvider(WordstatProvider):
             raise AuthRequired(self.name)
         raise ProviderError(self.name, f"баланс: неожиданный ответ ({answer[:100]!r})")
 
-    def _params(self, query_sent: str, lr: int) -> dict:
+    def _params(self, query_sent: str, lr: int, *, device: str | None = None, limit: int | None = None) -> dict:
+        # `device` и `groupby` — из их же параметров: пустое устройство значит все, groupby 1..2000.
         return {
             "user": self._credential["user"],
             "key": self._credential["token"],
             "query": query_sent,
             "regions": lr,
-            "groupby": _GROUPBY,
+            "groupby": limit or _GROUPBY,
+            "device": device or "all",
         }
 
     @classmethod
