@@ -14,7 +14,7 @@ Python-библиотека (`from rb_wordstat import WordstatClient`). Python-�
 Из git-тега (ставить из тега, не из ветки):
 
 ```bash
-uv tool install "rb-wordstat @ git+https://homeserver.tailee01ab.ts.net:3000/bolandeu/wordstat.git@vX.Y.Z"
+uv tool install "rb-wordstat @ git+https://github.com/bolandeu/rb-wordstat.git@vX.Y.Z"
 ```
 
 `vX.Y.Z` — последний тег релиза. Одинаково на macOS, Linux и Windows; обновление — `uv tool upgrade rb-wordstat`.

@@ -13,13 +13,12 @@ description: Частоты Яндекс.Wordstat (базовая, фразов�
 ## Установка (если `wordstat --version` не работает)
 
 ```bash
-uv tool install rb-wordstat --index https://homeserver.tailee01ab.ts.net:3000/api/packages/bolandeu/pypi/simple
 ```
 
 Из git-тега:
 
 ```bash
-uv tool install "rb-wordstat @ git+https://homeserver.tailee01ab.ts.net:3000/bolandeu/wordstat.git@vX.Y.Z"
+uv tool install "rb-wordstat @ git+https://github.com/bolandeu/rb-wordstat.git@vX.Y.Z"
 ```
 
 `vX.Y.Z` — последний тег релиза (ставить из тега, не из ветки:
