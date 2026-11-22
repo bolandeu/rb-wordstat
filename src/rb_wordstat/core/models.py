@@ -55,6 +55,7 @@ class WordstatResult(BaseModel):
     total_value: int  # частота запроса
     popular: list[WordstatEntry]  # похожие запросы
     associations: list[WordstatEntry]  # ассоциированные запросы
+    region: int | None = None  # код региона Яндекса (lr), по которому снята частота
     provider: str = ""  # какой провайдер из очереди ответил
     fetched_at: datetime | None = None  # когда провайдер отдал этот ответ
     from_cache: bool = False  # взят из журнала (--cache), а не живым запросом

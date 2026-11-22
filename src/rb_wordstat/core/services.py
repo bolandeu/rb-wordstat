@@ -141,23 +141,45 @@ def parse_age(value: str) -> timedelta:
     return timedelta(**{_AGE_UNITS[unit]: int(number)})
 
 
+def parse_regions(value: str) -> list[int]:
+    """`--lr 213` или `--lr 213,2,35` → коды регионов без дублей; мусор — ошибка аргумента, а не молчаливый 213."""
+    parts = [part.strip() for part in str(value).split(",") if part.strip()]
+    if not parts:
+        raise InvalidArguments("--lr: укажите хотя бы один код региона, например 213 или 213,2.")
+    regions: list[int] = []
+    for part in parts:
+        try:
+            regions.append(int(part))
+        except ValueError:
+            raise InvalidArguments(f"--lr: '{part}' не код региона; нужно число, например 213.") from None
+    return list(dict.fromkeys(regions))
+
+
 def search(
     queries: list[str],
     *,
     freq: list[FreqType],
-    lr: int,
+    lr: int | list[int],
     providers: list[str],
     use_cache: bool = False,
     max_age: timedelta | None = None,
     device: str | None = None,
     limit: int | None = None,
 ) -> list[WordstatResult]:
-    """Частоты по всем запросам × типам частоты через очередь провайдеров; ответы пишутся в журнал."""
-    try:
-        params = WordstatParams(query=queries, lr=lr, freq=freq, device=device, limit=limit)
-    except ValidationError as exc:
-        raise InvalidArguments("; ".join(err["msg"] for err in exc.errors())) from exc
-    return WordstatClient(providers=providers).search_sync(params, use_cache=use_cache, max_age=max_age)
+    """Частоты по всем запросам × типам частоты через очередь провайдеров; ответы пишутся в журнал.
+
+    Регионов может быть несколько (`--lr 213,2`): каждый — свой платный запрос, результаты идут в порядке регионов.
+    """
+    regions = [lr] if isinstance(lr, int) else list(lr)
+    client = WordstatClient(providers=providers)
+    results: list[WordstatResult] = []
+    for region in regions:
+        try:
+            params = WordstatParams(query=queries, lr=region, freq=freq, device=device, limit=limit)
+        except ValidationError as exc:
+            raise InvalidArguments("; ".join(err["msg"] for err in exc.errors())) from exc
+        results.extend(client.search_sync(params, use_cache=use_cache, max_age=max_age))
+    return results
 
 
 def csv_mode_for(mode: str, freq: list[FreqType]) -> str:

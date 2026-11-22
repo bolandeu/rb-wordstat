@@ -44,11 +44,13 @@ def _keywords_table(title: str, entries: list[WordstatEntry]) -> None:
 
 def _render(results: list[WordstatResult], show_keywords: bool) -> None:
     console = output.human.console
-    by_query: dict[str, list[WordstatResult]] = {}
+    regions = {r.region for r in results if r.region is not None}
+    by_query: dict[tuple[int | None, str], list[WordstatResult]] = {}
     for r in results:
-        by_query.setdefault(r.query, []).append(r)
-    for query, rows in by_query.items():
-        console.rule(f"[bold]{query}[/bold]")
+        by_query.setdefault((r.region, r.query), []).append(r)
+    for (region, query), rows in by_query.items():
+        title = f"{query} · регион {region}" if len(regions) > 1 else query
+        console.rule(f"[bold]{title}[/bold]")
         if len(rows) == 1:
             when = _when(rows[0])
             console.print(
@@ -80,7 +82,12 @@ def search(
         "-f",
         help="Тип(ы) частоты: broad, phrase, exact, exact-ord, all. Повторять флаг или через запятую.",
     ),
-    lr: int = typer.Option(213, "--lr", help="Код региона Яндекса: 213=Москва, 2=СПб, 35=Краснодар, 65=Новосибирск."),
+    lr: str = typer.Option(
+        "213",
+        "--lr",
+        help="Код региона Яндекса: 213=Москва, 2=СПб, 35=Краснодар, 65=Новосибирск. Несколько — через запятую: "
+        "213,2 — каждый регион это отдельный платный запрос.",
+    ),
     device: str | None = typer.Option(
         None,
         "--device",
@@ -161,6 +168,7 @@ def search(
       wordstat search "купить диван"
       wordstat search "купить диван" --freq all --no-keywords
       wordstat search "диван" "кресло" --freq broad,phrase --lr 2
+      wordstat search "диван" --lr 213,2,35            # три региона — три платных запроса
       wordstat search "купить диван" --device desktop --limit 500
       wordstat search "купить диван" -p xmlstock,xmlriver   # xmlriver — фолбэк
       wordstat search "купить диван" --freq all --output freq.csv
@@ -177,7 +185,7 @@ def search(
     results = services.search(
         queries,
         freq=freq_types,
-        lr=lr,
+        lr=services.parse_regions(lr),
         providers=providers,
         use_cache=cache and not force,
         max_age=services.parse_age(max_age) if max_age else None,

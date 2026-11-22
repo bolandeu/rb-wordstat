@@ -69,6 +69,7 @@ wordstat --ai                 # памятка для AI-агентов
 wordstat search "купить диван"
 wordstat search "купить диван" --freq all --no-keywords
 wordstat search "диван" "кресло" "стол" --freq broad,phrase --lr 2
+wordstat search "диван" --lr 213,2,35                # три региона — три платных запроса
 wordstat search "купить диван" -p xmlstock,xmlriver
 wordstat search "купить диван" --freq all --output freq.csv
 wordstat search "купить диван" --output keywords.csv --csv-mode keywords
@@ -76,7 +77,8 @@ wordstat search "купить диван" --device desktop --limit 500   # де�
 wordstat search "купить диван" --json | jq '.results[].total_value'
 ```
 
-`--device` — `desktop`, `phone` (`mobile`), `tablet`, через запятую; пусто — все устройства. `--limit` — сколько
+`--lr` берёт несколько регионов через запятую: каждый регион — отдельный платный запрос, в ответе у каждой строки свой
+`region`, порядок — как в аргументе. `--device` — `desktop`, `phone` (`mobile`), `tablet`, через запятую; пусто — все. `--limit` — сколько
 похожих фраз просить (XMLStock `groupby`, 1..2000); у XML River глубина задаётся в настройках аккаунта, параметра
 нет. Оба условия входят в ключ журнала: ответ для десктопа не подменит ответ для всех устройств.
 

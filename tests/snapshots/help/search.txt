@@ -36,6 +36,7 @@
    wordstat search "купить диван"
    wordstat search "купить диван" --freq all --no-keywords
    wordstat search "диван" "кресло" --freq broad,phrase --lr 2
+   wordstat search "диван" --lr 213,2,35            # три региона — три платных запроса
    wordstat search "купить диван" --device desktop --limit 500
    wordstat search "купить диван" -p xmlstock,xmlriver   # xmlriver — фолбэк
    wordstat search "купить диван" --freq all --output freq.csv
@@ -52,8 +53,10 @@
 │ --freq         -f      <str>                 Тип(ы) частоты: broad, phrase, exact, exact-ord,    │
 │                                              all. Повторять флаг или через запятую.              │
 │                                              [по умолчанию: broad]                               │
-│ --lr                   <int>                 Код региона Яндекса: 213=Москва, 2=СПб,             │
-│                                              35=Краснодар, 65=Новосибирск.                       │
+│ --lr                   <str>                 Код региона Яндекса: 213=Москва, 2=СПб,             │
+│                                              35=Краснодар, 65=Новосибирск. Несколько — через     │
+│                                              запятую: 213,2 — каждый регион это отдельный        │
+│                                              платный запрос.                                     │
 │                                              [по умолчанию: 213]                                 │
 │ --device               <str>                 Устройства через запятую: desktop, phone (mobile),  │
 │                                              tablet. Пусто — все устройства.                     │

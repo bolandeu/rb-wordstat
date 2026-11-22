@@ -234,7 +234,7 @@ def test_search_json(fake_search: list[dict], tmp_path: Path) -> None:
     assert payload["count"] == 4
     assert payload["results"][1]["freq_type"] == "exact_ord"
     assert payload["saved_to"] == str(out)
-    assert fake_search[0]["lr"] == 2
+    assert fake_search[0]["lr"] == [2]  # один регион — список из одного, чтобы форма не зависела от числа
     assert fake_search[0]["providers"] == ["xmlstock", "xmlriver"]
     assert out.read_text(encoding="utf-8").startswith("query,freq_type")
 
