@@ -22,7 +22,7 @@ uv tool install "rb-wordstat @ git+https://github.com/bolandeu/rb-wordstat.git@v
 ```
 
 `vX.Y.Z` — последний тег релиза (ставить из тега, не из ветки:
-[Стандарт](https://homeserver.tailee01ab.ts.net:3000/bolandeu/cli-generator/src/branch/main/skills/cli-builder/reference/standard.md), Install).
+[Стандарт](https://github.com/bolandeu/cli-generator/src/branch/main/skills/cli-builder/reference/standard.md), Install).
 
 Одинаково на macOS, Linux и Windows; обновление — `uv tool upgrade rb-wordstat`
 (пакет называется `rb-wordstat`, команда — `wordstat`). Не запускать из
